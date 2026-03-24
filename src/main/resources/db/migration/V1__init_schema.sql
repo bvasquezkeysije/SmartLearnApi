@@ -1,0 +1,164 @@
+CREATE TABLE IF NOT EXISTS people (
+    id BIGSERIAL PRIMARY KEY,
+    first_name VARCHAR(255) NOT NULL,
+    last_name VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS users (
+    id BIGSERIAL PRIMARY KEY,
+    person_id BIGINT NULL REFERENCES people(id) ON DELETE SET NULL,
+    name VARCHAR(255) NOT NULL,
+    username VARCHAR(255) UNIQUE,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    email_verified_at TIMESTAMP NULL,
+    password VARCHAR(255) NOT NULL,
+    remember_token VARCHAR(100) NULL,
+    status SMALLINT NOT NULL DEFAULT 1,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS roles (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    guard_name VARCHAR(255) NOT NULL DEFAULT 'web',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_roles_name_guard UNIQUE (name, guard_name)
+);
+
+CREATE TABLE IF NOT EXISTS permissions (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    guard_name VARCHAR(255) NOT NULL DEFAULT 'web',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_permissions_name_guard UNIQUE (name, guard_name)
+);
+
+CREATE TABLE IF NOT EXISTS role_permissions (
+    role_id BIGINT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+    permission_id BIGINT NOT NULL REFERENCES permissions(id) ON DELETE CASCADE,
+    PRIMARY KEY (role_id, permission_id)
+);
+
+CREATE TABLE IF NOT EXISTS user_roles (
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role_id BIGINT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, role_id)
+);
+
+CREATE TABLE IF NOT EXISTS projects (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    description TEXT NULL,
+    deleted_at TIMESTAMP NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS tasks (
+    id BIGSERIAL PRIMARY KEY,
+    project_id BIGINT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'pending',
+    priority VARCHAR(32) NOT NULL DEFAULT 'medium',
+    deleted_at TIMESTAMP NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_tasks_status_priority ON tasks(status, priority);
+
+CREATE TABLE IF NOT EXISTS ai_chats (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ai_chat_messages (
+    id BIGSERIAL PRIMARY KEY,
+    ai_chat_id BIGINT NOT NULL REFERENCES ai_chats(id) ON DELETE CASCADE,
+    role VARCHAR(20) NOT NULL,
+    content TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS exams (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    source_file_path VARCHAR(500) NOT NULL,
+    questions_count INTEGER NOT NULL DEFAULT 0,
+    practice_feedback_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    practice_order_mode VARCHAR(16) NOT NULL DEFAULT 'ordered',
+    practice_repeat_until_correct BOOLEAN NOT NULL DEFAULT FALSE,
+    deleted_at TIMESTAMP NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS questions (
+    id BIGSERIAL PRIMARY KEY,
+    exam_id BIGINT NULL REFERENCES exams(id) ON DELETE SET NULL,
+    question_text TEXT NOT NULL,
+    question_type VARCHAR(32) NOT NULL,
+    correct_answer TEXT NULL,
+    explanation TEXT NULL,
+    points INTEGER NOT NULL DEFAULT 1,
+    time_limit INTEGER NOT NULL DEFAULT 60,
+    temporizador_segundos INTEGER NULL,
+    timer_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS options (
+    id BIGSERIAL PRIMARY KEY,
+    question_id BIGINT NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+    option_text TEXT NOT NULL,
+    is_correct BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS exam_attempts (
+    id BIGSERIAL PRIMARY KEY,
+    exam_id BIGINT NOT NULL REFERENCES exams(id) ON DELETE CASCADE,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    question_ids JSONB NULL,
+    questions_order_mode VARCHAR(16) NOT NULL DEFAULT 'ordered',
+    feedback_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    repeat_until_correct BOOLEAN NOT NULL DEFAULT FALSE,
+    total_questions INTEGER NOT NULL DEFAULT 0,
+    answered_count INTEGER NOT NULL DEFAULT 0,
+    unanswered_count INTEGER NOT NULL DEFAULT 0,
+    correct_count INTEGER NOT NULL DEFAULT 0,
+    total_points INTEGER NOT NULL DEFAULT 0,
+    scored_points INTEGER NOT NULL DEFAULT 0,
+    started_at TIMESTAMP NULL,
+    finished_at TIMESTAMP NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS exam_attempt_answers (
+    id BIGSERIAL PRIMARY KEY,
+    exam_attempt_id BIGINT NOT NULL REFERENCES exam_attempts(id) ON DELETE CASCADE,
+    question_id BIGINT NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+    selected_answer TEXT NULL,
+    is_correct BOOLEAN NULL,
+    is_unanswered BOOLEAN NOT NULL DEFAULT FALSE,
+    time_spent_seconds INTEGER NULL,
+    cronometro_segundos INTEGER NULL,
+    answered_at TIMESTAMP NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_exam_attempt_question UNIQUE (exam_attempt_id, question_id)
+);

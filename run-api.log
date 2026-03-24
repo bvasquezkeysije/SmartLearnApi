@@ -1,0 +1,326 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ---------------------< com.bardales:SmartLearnApi >---------------------
+[INFO] Building SmartLearnApi 0.0.1-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] >>> spring-boot:4.0.3:run (default-cli) > test-compile @ SmartLearnApi >>>
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ SmartLearnApi ---
+[INFO] Copying 1 resource from src\main\resources to target\classes
+[INFO] Copying 25 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.14.1:compile (default-compile) @ SmartLearnApi ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ SmartLearnApi ---
+[INFO] skip non existing resourceDirectory E:\SMARTLEARN\SmartLearnApi\src\test\resources
+[INFO] 
+[INFO] --- compiler:3.14.1:testCompile (default-testCompile) @ SmartLearnApi ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] <<< spring-boot:4.0.3:run (default-cli) < test-compile @ SmartLearnApi <<<
+[INFO] 
+[INFO] 
+[INFO] --- spring-boot:4.0.3:run (default-cli) @ SmartLearnApi ---
+[INFO] Attaching agents: []
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.0.3)
+
+2026-03-19T21:46:00.387-05:00  INFO 61896 --- [SmartLearnApi] [           main] c.b.S.SmartLearnApiApplication           : Starting SmartLearnApiApplication using Java 25.0.2 with PID 61896 (E:\SMARTLEARN\SmartLearnApi\target\classes started by KST in E:\SMARTLEARN\SmartLearnApi)
+2026-03-19T21:46:00.388-05:00  INFO 61896 --- [SmartLearnApi] [           main] c.b.S.SmartLearnApiApplication           : No active profile set, falling back to 1 default profile: "default"
+2026-03-19T21:46:00.885-05:00  INFO 61896 --- [SmartLearnApi] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-03-19T21:46:00.955-05:00  INFO 61896 --- [SmartLearnApi] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 65 ms. Found 28 JPA repository interfaces.
+2026-03-19T21:46:01.254-05:00  INFO 61896 --- [SmartLearnApi] [           main] o.s.boot.tomcat.TomcatWebServer          : Tomcat initialized with port 8080 (http)
+2026-03-19T21:46:01.261-05:00  INFO 61896 --- [SmartLearnApi] [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-03-19T21:46:01.262-05:00  INFO 61896 --- [SmartLearnApi] [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/11.0.18]
+2026-03-19T21:46:01.308-05:00  INFO 61896 --- [SmartLearnApi] [           main] b.w.c.s.WebApplicationContextInitializer : Root WebApplicationContext: initialization completed in 895 ms
+2026-03-19T21:46:01.417-05:00  INFO 61896 --- [SmartLearnApi] [           main] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-03-19T21:46:01.441-05:00  INFO 61896 --- [SmartLearnApi] [           main] org.hibernate.orm.core                   : HHH000001: Hibernate ORM core version 7.2.4.Final
+2026-03-19T21:46:01.689-05:00  INFO 61896 --- [SmartLearnApi] [           main] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-03-19T21:46:01.707-05:00  INFO 61896 --- [SmartLearnApi] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-03-19T21:46:01.828-05:00  INFO 61896 --- [SmartLearnApi] [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@28b68067
+2026-03-19T21:46:01.829-05:00  INFO 61896 --- [SmartLearnApi] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-03-19T21:46:01.883-05:00  INFO 61896 --- [SmartLearnApi] [           main] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/db_a21k]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 18.2
+	Default catalog/schema: db_a21k/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-03-19T21:46:02.709-05:00  INFO 61896 --- [SmartLearnApi] [           main] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-03-19T21:46:02.795-05:00  INFO 61896 --- [SmartLearnApi] [           main] org.hibernate.orm.core                   : HHH000475: Cannot locate column information using identifier [lower((code)::text)]; ignoring index [ux_courses_code_active]
+2026-03-19T21:46:02.814-05:00  INFO 61896 --- [SmartLearnApi] [           main] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-03-19T21:46:02.866-05:00  INFO 61896 --- [SmartLearnApi] [           main] o.s.d.j.r.query.QueryEnhancerFactories   : Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-03-19T21:46:03.432-05:00  WARN 61896 --- [SmartLearnApi] [           main] .s.a.UserDetailsServiceAutoConfiguration : 
+
+Using generated security password: 0a9d8772-3b24-4dac-8b27-294bc30418bb
+
+This generated password is for development use only. Your security configuration must be updated before running your application in production.
+
+2026-03-19T21:46:03.437-05:00  INFO 61896 --- [SmartLearnApi] [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name inMemoryUserDetailsManager
+2026-03-19T21:46:03.733-05:00  INFO 61896 --- [SmartLearnApi] [           main] o.s.boot.tomcat.TomcatWebServer          : Tomcat started on port 8080 (http) with context path '/'
+2026-03-19T21:46:03.736-05:00  INFO 61896 --- [SmartLearnApi] [           main] c.b.S.SmartLearnApiApplication           : Started SmartLearnApiApplication in 3.566 seconds (process running for 3.893)
+2026-03-19T21:47:11.954-05:00  INFO 61896 --- [SmartLearnApi] [nio-8080-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-03-19T21:47:11.955-05:00  INFO 61896 --- [SmartLearnApi] [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2026-03-19T21:47:11.957-05:00  INFO 61896 --- [SmartLearnApi] [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 2 ms
+2026-03-19T22:50:17.234-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-1] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-19T22:50:17.234-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-1] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 45592 espera ShareLock en transacción 9014; bloqueado por proceso 56808.
+El proceso 56808 espera ShareLock en transacción 9015; bloqueado por proceso 45592.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,106) en la relación «exam_group_session_members»
+2026-03-19T23:01:17.210-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-7] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-19T23:01:17.210-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-7] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 53556 espera ShareLock en transacción 9176; bloqueado por proceso 56808.
+El proceso 56808 espera ShareLock en transacción 9177; bloqueado por proceso 53556.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,110) en la relación «exam_group_session_members»
+2026-03-19T23:03:17.220-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-5] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-19T23:03:17.220-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-5] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 53556 espera ShareLock en transacción 9181; bloqueado por proceso 26156.
+El proceso 26156 espera ShareLock en transacción 9180; bloqueado por proceso 53556.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,4) en la relación «exam_group_session_members»
+2026-03-19T23:05:17.220-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-1] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-19T23:05:17.220-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-1] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 54584 espera ShareLock en transacción 9186; bloqueado por proceso 26156.
+El proceso 26156 espera ShareLock en transacción 9185; bloqueado por proceso 54584.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,16) en la relación «exam_group_session_members»
+2026-03-19T23:07:17.218-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-3] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-19T23:07:17.218-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-3] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 8916 espera ShareLock en transacción 9190; bloqueado por proceso 51020.
+El proceso 51020 espera ShareLock en transacción 9189; bloqueado por proceso 8916.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,39) en la relación «exam_group_session_members»
+2026-03-20T02:03:28.273-05:00  WARN 61896 --- [SmartLearnApi] [l-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=2h54m26s73ms413µs600ns).
+2026-03-20T02:29:17.098-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-5] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T02:29:17.098-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-5] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 30436 espera ShareLock en transacción 9728; bloqueado por proceso 33608.
+El proceso 33608 espera ShareLock en transacción 9727; bloqueado por proceso 30436.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,63) en la relación «exam_group_session_members»
+2026-03-20T02:30:17.104-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-1] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T02:30:17.104-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-1] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 33608 espera ShareLock en transacción 9730; bloqueado por proceso 30436.
+El proceso 30436 espera ShareLock en transacción 9731; bloqueado por proceso 33608.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,81) en la relación «exam_group_session_members»
+2026-03-20T02:34:17.098-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-8] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T02:34:17.098-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-8] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 19996 espera ShareLock en transacción 9740; bloqueado por proceso 27160.
+El proceso 27160 espera ShareLock en transacción 9739; bloqueado por proceso 19996.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,96) en la relación «exam_group_session_members»
+2026-03-20T02:35:17.098-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-7] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T02:35:17.098-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-7] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 27160 espera ShareLock en transacción 9742; bloqueado por proceso 19996.
+El proceso 19996 espera ShareLock en transacción 9743; bloqueado por proceso 27160.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,100) en la relación «exam_group_session_members»
+2026-03-20T02:36:17.101-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-4] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T02:36:17.101-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-4] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 19996 espera ShareLock en transacción 9746; bloqueado por proceso 27160.
+El proceso 27160 espera ShareLock en transacción 9745; bloqueado por proceso 19996.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,107) en la relación «exam_group_session_members»
+2026-03-20T02:37:17.095-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-1] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T02:37:17.095-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-1] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 27160 espera ShareLock en transacción 9748; bloqueado por proceso 19996.
+El proceso 19996 espera ShareLock en transacción 9749; bloqueado por proceso 27160.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,117) en la relación «exam_group_session_members»
+2026-03-20T02:38:17.094-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-6] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T02:38:17.095-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-6] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 19996 espera ShareLock en transacción 9751; bloqueado por proceso 27160.
+El proceso 27160 espera ShareLock en transacción 9752; bloqueado por proceso 19996.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,9) en la relación «exam_group_session_members»
+2026-03-20T02:39:17.103-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-4] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T02:39:17.103-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-4] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 19996 espera ShareLock en transacción 9755; bloqueado por proceso 27160.
+El proceso 27160 espera ShareLock en transacción 9754; bloqueado por proceso 19996.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,14) en la relación «exam_group_session_members»
+2026-03-20T02:41:17.096-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-8] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T02:41:17.096-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-8] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 19996 espera ShareLock en transacción 9760; bloqueado por proceso 27160.
+El proceso 27160 espera ShareLock en transacción 9759; bloqueado por proceso 19996.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,63) en la relación «exam_group_session_members»
+2026-03-20T02:42:17.089-05:00  WARN 61896 --- [SmartLearnApi] [io-8080-exec-10] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T02:42:17.089-05:00  WARN 61896 --- [SmartLearnApi] [io-8080-exec-10] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 19996 espera ShareLock en transacción 9763; bloqueado por proceso 27160.
+El proceso 27160 espera ShareLock en transacción 9762; bloqueado por proceso 19996.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,77) en la relación «exam_group_session_members»
+2026-03-20T02:43:17.100-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-3] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T02:43:17.100-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-3] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 27160 espera ShareLock en transacción 9766; bloqueado por proceso 19996.
+El proceso 19996 espera ShareLock en transacción 9767; bloqueado por proceso 27160.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,83) en la relación «exam_group_session_members»
+2026-03-20T02:44:17.117-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-8] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T02:44:17.117-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-8] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 19996 espera ShareLock en transacción 9769; bloqueado por proceso 27160.
+El proceso 27160 espera ShareLock en transacción 9770; bloqueado por proceso 19996.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,84) en la relación «exam_group_session_members»
+2026-03-20T02:45:17.106-05:00  WARN 61896 --- [SmartLearnApi] [io-8080-exec-10] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T02:45:17.107-05:00  WARN 61896 --- [SmartLearnApi] [io-8080-exec-10] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 27160 espera ShareLock en transacción 9772; bloqueado por proceso 19996.
+El proceso 19996 espera ShareLock en transacción 9773; bloqueado por proceso 27160.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,90) en la relación «exam_group_session_members»
+2026-03-20T02:46:17.092-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-3] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T02:46:17.092-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-3] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 27160 espera ShareLock en transacción 9775; bloqueado por proceso 19996.
+El proceso 19996 espera ShareLock en transacción 9776; bloqueado por proceso 27160.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,96) en la relación «exam_group_session_members»
+2026-03-20T02:47:17.093-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-8] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T02:47:17.093-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-8] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 27160 espera ShareLock en transacción 9778; bloqueado por proceso 19996.
+El proceso 19996 espera ShareLock en transacción 9779; bloqueado por proceso 27160.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,100) en la relación «exam_group_session_members»
+2026-03-20T02:49:17.101-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-8] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T02:49:17.101-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-8] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 27160 espera ShareLock en transacción 9808; bloqueado por proceso 19996.
+El proceso 19996 espera ShareLock en transacción 9807; bloqueado por proceso 27160.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,79) en la relación «exam_group_session_members»
+2026-03-20T02:50:17.093-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-1] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T02:50:17.094-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-1] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 27160 espera ShareLock en transacción 9811; bloqueado por proceso 19996.
+El proceso 19996 espera ShareLock en transacción 9810; bloqueado por proceso 27160.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,89) en la relación «exam_group_session_members»
+2026-03-20T02:51:17.095-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-7] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T02:51:17.095-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-7] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 27160 espera ShareLock en transacción 9813; bloqueado por proceso 19996.
+El proceso 19996 espera ShareLock en transacción 9814; bloqueado por proceso 27160.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,94) en la relación «exam_group_session_members»
+2026-03-20T02:52:17.115-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-4] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T02:52:17.116-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-4] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 19996 espera ShareLock en transacción 9816; bloqueado por proceso 27160.
+El proceso 27160 espera ShareLock en transacción 9817; bloqueado por proceso 19996.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,96) en la relación «exam_group_session_members»
+2026-03-20T02:53:17.117-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-2] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T02:53:17.117-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-2] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 41240 espera ShareLock en transacción 9821; bloqueado por proceso 18188.
+El proceso 18188 espera ShareLock en transacción 9820; bloqueado por proceso 41240.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,107) en la relación «exam_group_session_members»
+2026-03-20T02:56:17.116-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-8] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T02:56:17.116-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-8] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 12140 espera ShareLock en transacción 9827; bloqueado por proceso 34580.
+El proceso 34580 espera ShareLock en transacción 9828; bloqueado por proceso 12140.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,121) en la relación «exam_group_session_members»
+2026-03-20T02:57:17.103-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-1] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T02:57:17.104-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-1] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 12140 espera ShareLock en transacción 9830; bloqueado por proceso 34580.
+El proceso 34580 espera ShareLock en transacción 9831; bloqueado por proceso 12140.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,6) en la relación «exam_group_session_members»
+2026-03-20T03:01:17.104-05:00  WARN 61896 --- [SmartLearnApi] [io-8080-exec-10] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T03:01:17.104-05:00  WARN 61896 --- [SmartLearnApi] [io-8080-exec-10] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 38648 espera ShareLock en transacción 9864; bloqueado por proceso 34860.
+El proceso 34860 espera ShareLock en transacción 9863; bloqueado por proceso 38648.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,109) en la relación «exam_group_session_members»
+2026-03-20T03:21:17.097-05:00  WARN 61896 --- [SmartLearnApi] [io-8080-exec-10] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T03:21:17.097-05:00  WARN 61896 --- [SmartLearnApi] [io-8080-exec-10] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 61120 espera ShareLock en transacción 10313; bloqueado por proceso 13880.
+El proceso 13880 espera ShareLock en transacción 10314; bloqueado por proceso 61120.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,83) en la relación «exam_group_session_members»
+2026-03-20T03:46:43.100-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-1] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T03:46:43.100-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-1] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 8040 espera ShareLock en transacción 11040; bloqueado por proceso 55576.
+El proceso 55576 espera ShareLock en transacción 11041; bloqueado por proceso 8040.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (0,101) en la relación «exam_group_session_members»
+2026-03-20T04:58:17.103-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-9] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T04:58:17.104-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-9] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 61328 espera ShareLock en transacción 13965; bloqueado por proceso 33524.
+El proceso 33524 espera ShareLock en transacción 13966; bloqueado por proceso 61328.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (1,2) en la relación «exam_group_session_members»
+2026-03-20T05:36:17.095-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-1] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T05:36:17.095-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-1] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 41004 espera ShareLock en transacción 15564; bloqueado por proceso 58044.
+El proceso 58044 espera ShareLock en transacción 15565; bloqueado por proceso 41004.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (1,117) en la relación «exam_group_session_members»
+2026-03-20T05:38:17.100-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-3] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T05:38:17.100-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-3] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 58044 espera ShareLock en transacción 15572; bloqueado por proceso 53504.
+El proceso 53504 espera ShareLock en transacción 15571; bloqueado por proceso 58044.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (1,39) en la relación «exam_group_session_members»
+2026-03-20T05:44:17.111-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-7] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T05:44:17.111-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-7] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 36720 espera ShareLock en transacción 15583; bloqueado por proceso 25384.
+El proceso 25384 espera ShareLock en transacción 15584; bloqueado por proceso 36720.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (1,64) en la relación «exam_group_session_members»
+2026-03-20T05:54:17.099-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-3] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T05:54:17.100-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-3] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 53420 espera ShareLock en transacción 15736; bloqueado por proceso 44876.
+El proceso 44876 espera ShareLock en transacción 15735; bloqueado por proceso 53420.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (1,78) en la relación «exam_group_session_members»
+2026-03-20T05:58:17.108-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-5] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T05:58:17.108-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-5] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 44876 espera ShareLock en transacción 15859; bloqueado por proceso 53420.
+El proceso 53420 espera ShareLock en transacción 15860; bloqueado por proceso 44876.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (1,43) en la relación «exam_group_session_members»
+2026-03-20T06:08:17.110-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-6] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T06:08:17.110-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-6] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 44240 espera ShareLock en transacción 21972; bloqueado por proceso 46496.
+El proceso 46496 espera ShareLock en transacción 21973; bloqueado por proceso 44240.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (1,126) en la relación «exam_group_session_members»
+2026-03-20T06:09:17.098-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-4] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T06:09:17.098-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-4] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 46496 espera ShareLock en transacción 21976; bloqueado por proceso 44240.
+El proceso 44240 espera ShareLock en transacción 21975; bloqueado por proceso 46496.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (1,128) en la relación «exam_group_session_members»
+2026-03-20T06:10:17.103-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-5] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T06:10:17.103-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-5] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 46496 espera ShareLock en transacción 21978; bloqueado por proceso 44240.
+El proceso 44240 espera ShareLock en transacción 21979; bloqueado por proceso 46496.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (1,32) en la relación «exam_group_session_members»
+2026-03-20T06:11:17.099-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-4] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T06:11:17.099-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-4] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 46496 espera ShareLock en transacción 21982; bloqueado por proceso 44240.
+El proceso 44240 espera ShareLock en transacción 21981; bloqueado por proceso 46496.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (1,58) en la relación «exam_group_session_members»
+2026-03-20T06:12:17.111-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-5] org.hibernate.orm.jdbc.error             : HHH000247: ErrorCode: 0, SQLState: 40P01
+2026-03-20T06:12:17.111-05:00  WARN 61896 --- [SmartLearnApi] [nio-8080-exec-5] org.hibernate.orm.jdbc.error             : ERROR: se ha detectado un deadlock
+  Detail: El proceso 46496 espera ShareLock en transacción 21984; bloqueado por proceso 44240.
+El proceso 44240 espera ShareLock en transacción 21985; bloqueado por proceso 46496.
+  Hint: Vea el registro del servidor para obtener detalles de las consultas.
+  Where: mientras se actualizaba la tupla (1,62) en la relación «exam_group_session_members»

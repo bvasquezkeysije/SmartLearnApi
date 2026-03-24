@@ -1,0 +1,511 @@
+package com.bardales.SmartLearnApi.service;
+
+import com.bardales.SmartLearnApi.domain.entity.Course;
+import com.bardales.SmartLearnApi.domain.entity.CourseMembership;
+import com.bardales.SmartLearnApi.domain.entity.Exam;
+import com.bardales.SmartLearnApi.domain.entity.ExamMembership;
+import com.bardales.SmartLearnApi.domain.entity.ShareLink;
+import com.bardales.SmartLearnApi.domain.entity.ShareNotification;
+import com.bardales.SmartLearnApi.domain.entity.User;
+import com.bardales.SmartLearnApi.domain.repository.CourseMembershipRepository;
+import com.bardales.SmartLearnApi.domain.repository.CourseRepository;
+import com.bardales.SmartLearnApi.domain.repository.ExamMembershipRepository;
+import com.bardales.SmartLearnApi.domain.repository.ExamRepository;
+import com.bardales.SmartLearnApi.domain.repository.ShareLinkRepository;
+import com.bardales.SmartLearnApi.domain.repository.ShareNotificationRepository;
+import com.bardales.SmartLearnApi.domain.repository.UserRepository;
+import com.bardales.SmartLearnApi.dto.share.ShareLinkClaimRequest;
+import com.bardales.SmartLearnApi.dto.share.ShareLinkClaimResponse;
+import com.bardales.SmartLearnApi.dto.share.ShareLinkCreateRequest;
+import com.bardales.SmartLearnApi.dto.share.ShareLinkDistributeRequest;
+import com.bardales.SmartLearnApi.dto.share.ShareLinkDistributeResponse;
+import com.bardales.SmartLearnApi.dto.share.ShareNotificationRecipientResponse;
+import com.bardales.SmartLearnApi.dto.share.ShareNotificationResponse;
+import com.bardales.SmartLearnApi.dto.share.ShareLinkResponse;
+import com.bardales.SmartLearnApi.exception.BadRequestException;
+import com.bardales.SmartLearnApi.exception.NotFoundException;
+import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.UUID;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+public class ShareLinkService {
+
+    private static final int DEFAULT_EXPIRES_HOURS = 24 * 7;
+    private static final int MAX_EXPIRES_HOURS = 24 * 30;
+
+    private final ShareLinkRepository shareLinkRepository;
+    private final UserRepository userRepository;
+    private final ExamRepository examRepository;
+    private final ExamMembershipRepository examMembershipRepository;
+    private final CourseRepository courseRepository;
+    private final CourseMembershipRepository courseMembershipRepository;
+    private final ShareNotificationRepository shareNotificationRepository;
+    private final ExamService examService;
+
+    public ShareLinkService(
+            ShareLinkRepository shareLinkRepository,
+            UserRepository userRepository,
+            ExamRepository examRepository,
+            ExamMembershipRepository examMembershipRepository,
+            CourseRepository courseRepository,
+            CourseMembershipRepository courseMembershipRepository,
+            ShareNotificationRepository shareNotificationRepository,
+            ExamService examService) {
+        this.shareLinkRepository = shareLinkRepository;
+        this.userRepository = userRepository;
+        this.examRepository = examRepository;
+        this.examMembershipRepository = examMembershipRepository;
+        this.courseRepository = courseRepository;
+        this.courseMembershipRepository = courseMembershipRepository;
+        this.shareNotificationRepository = shareNotificationRepository;
+        this.examService = examService;
+    }
+
+    @Transactional
+    public ShareLinkResponse createExamShareLink(Long examId, ShareLinkCreateRequest request) {
+        User owner = requireUser(request.userId());
+        Exam exam = examService.requireExamCanShare(examId, owner.getId());
+        ShareLink shareLink = createShareLink(owner, "exam", exam.getId(), request.expiresInHours());
+        return toResponse(shareLink);
+    }
+
+    @Transactional
+    public ShareLinkResponse createCourseShareLink(Long courseId, ShareLinkCreateRequest request) {
+        User owner = requireUser(request.userId());
+        Course course = courseRepository.findByIdAndUserIdAndDeletedAtIsNull(courseId, owner.getId())
+                .orElseThrow(() -> new NotFoundException("Curso no encontrado"));
+        ShareLink shareLink = createShareLink(owner, "course", course.getId(), request.expiresInHours());
+        return toResponse(shareLink);
+    }
+
+    @Transactional
+    public ShareLinkClaimResponse claimShareLink(ShareLinkClaimRequest request) {
+        User user = requireUser(request.userId());
+        String token = normalizeToken(request.token());
+        ShareLink shareLink = shareLinkRepository
+                .findByTokenAndActiveIsTrueAndDeletedAtIsNull(token)
+                .orElseThrow(() -> new NotFoundException("Enlace de comparticion no encontrado"));
+
+        validateShareLinkIsUsable(shareLink);
+        String type = normalizeResourceType(shareLink.getResourceType());
+
+        ShareLinkClaimResponse response;
+        if (type.equals("exam")) {
+            response = claimExamLink(shareLink, user);
+        } else if (type.equals("course")) {
+            response = claimCourseLink(shareLink, user);
+        } else if (type.equals("sala")) {
+            response = claimSalaLink(shareLink);
+        } else {
+            throw new BadRequestException("Tipo de recurso de comparticion invalido");
+        }
+
+        shareLink.setClaimsCount((shareLink.getClaimsCount() == null ? 0 : shareLink.getClaimsCount()) + 1);
+        shareLinkRepository.save(shareLink);
+        return response;
+    }
+
+    private ShareLink createShareLink(User owner, String resourceType, Long resourceId, Integer expiresInHours) {
+        ShareLink shareLink = new ShareLink();
+        shareLink.setOwnerUser(owner);
+        shareLink.setResourceType(resourceType);
+        shareLink.setResourceId(resourceId);
+        shareLink.setToken(generateShareToken());
+        shareLink.setExpiresAt(LocalDateTime.now().plusHours(resolveExpiresInHours(expiresInHours)));
+        shareLink.setMaxClaims(null);
+        shareLink.setClaimsCount(0);
+        shareLink.setActive(Boolean.TRUE);
+        return shareLinkRepository.save(shareLink);
+    }
+
+    private ShareLinkClaimResponse claimExamLink(ShareLink shareLink, User user) {
+        Exam exam = examRepository.findById(shareLink.getResourceId())
+                .orElseThrow(() -> new NotFoundException("Examen no encontrado"));
+        if (exam.getDeletedAt() != null) {
+            throw new NotFoundException("Examen no encontrado");
+        }
+
+        Long ownerUserId = exam.getUser() == null ? null : exam.getUser().getId();
+        boolean isOwner = ownerUserId != null && ownerUserId.equals(user.getId());
+        ExamMembership membership = examMembershipRepository
+                .findByExamIdAndUserIdAndDeletedAtIsNull(exam.getId(), user.getId())
+                .orElse(null);
+
+        if (!isOwner && membership == null) {
+            String visibility = normalizeExamVisibility(exam.getVisibility());
+            if (!visibility.equals("public")) {
+                throw new BadRequestException("Este examen es privado. Solicita acceso al propietario.");
+            }
+            examService.upsertExamMembership(exam, user, "viewer", Boolean.FALSE);
+        }
+
+        String examName = trimOrNull(exam.getName());
+        if (examName == null) {
+            examName = "examen";
+        }
+
+        return new ShareLinkClaimResponse(
+                "exam",
+                exam.getId(),
+                examName,
+                "Examen compartido disponible en tu modulo de examenes.");
+    }
+
+    private ShareLinkClaimResponse claimCourseLink(ShareLink shareLink, User user) {
+        Course course = courseRepository.findById(shareLink.getResourceId())
+                .orElseThrow(() -> new NotFoundException("Curso no encontrado"));
+        if (course.getDeletedAt() != null) {
+            throw new NotFoundException("Curso no encontrado");
+        }
+
+        Long ownerId = course.getUser() == null ? null : course.getUser().getId();
+        if (ownerId == null) {
+            throw new NotFoundException("Curso no encontrado");
+        }
+
+        if (!ownerId.equals(user.getId())) {
+            CourseMembership membership = courseMembershipRepository
+                    .findByCourseIdAndUserIdAndDeletedAtIsNull(course.getId(), user.getId())
+                    .orElse(null);
+            if (membership == null) {
+                membership = new CourseMembership();
+                membership.setCourse(course);
+                membership.setUser(user);
+                membership.setRole("viewer");
+                courseMembershipRepository.save(membership);
+            }
+        }
+
+        String courseName = trimOrNull(course.getName());
+        if (courseName == null) {
+            courseName = "curso";
+        }
+        return new ShareLinkClaimResponse(
+                "course",
+                course.getId(),
+                courseName,
+                "Curso compartido agregado a tu modulo de cursos.");
+    }
+
+    private ShareLinkClaimResponse claimSalaLink(ShareLink shareLink) {
+        Long salaId = shareLink.getResourceId();
+        if (salaId == null || salaId <= 0) {
+            throw new BadRequestException("Sala compartida invalida");
+        }
+        return new ShareLinkClaimResponse(
+                "sala",
+                salaId,
+                "Sala",
+                "Sala compartida lista en tu modulo de salas.");
+    }
+
+    @Transactional(readOnly = true)
+    public List<ShareNotificationRecipientResponse> listRecipients(Long userId) {
+        User requester = requireUser(userId);
+        return userRepository.findByStatusOrderByNameAsc(1).stream()
+                .filter(user -> user.getId() != null && !user.getId().equals(requester.getId()))
+                .map(user -> new ShareNotificationRecipientResponse(
+                        user.getId(),
+                        trimOrNull(user.getName()) == null ? "Usuario" : trimOrNull(user.getName()),
+                        trimOrNull(user.getUsername()) == null ? "" : trimOrNull(user.getUsername()),
+                        trimOrNull(user.getEmail()) == null ? "" : trimOrNull(user.getEmail())))
+                .toList();
+    }
+
+    @Transactional
+    public ShareLinkDistributeResponse distributeShareLink(ShareLinkDistributeRequest request) {
+        User owner = requireUser(request.userId());
+        String resourceType = normalizeDistributionResourceType(request.resourceType());
+        Long resourceId = request.resourceId();
+
+        if (resourceId == null || resourceId <= 0) {
+            throw new BadRequestException("resourceId es obligatorio");
+        }
+
+        Exam examToShare = null;
+        if (resourceType.equals("exam")) {
+            examToShare = examService.requireExamCanShare(resourceId, owner.getId());
+        } else {
+            validateOwnerCanShareResource(owner, resourceType, resourceId);
+        }
+
+        String resourceName = resolveResourceName(resourceType, resourceId, request.resourceName());
+
+        Set<Long> recipientIds = normalizeRecipientIds(request.recipientUserIds(), owner.getId());
+        if (recipientIds.isEmpty()) {
+            throw new BadRequestException("Selecciona al menos un usuario destino");
+        }
+
+        List<User> recipients = userRepository.findAllById(recipientIds).stream()
+                .filter(user -> user.getStatus() != null && user.getStatus() == 1)
+                .toList();
+        if (recipients.size() != recipientIds.size()) {
+            throw new BadRequestException("Uno o mas usuarios destino no son validos");
+        }
+
+        if (resourceType.equals("exam") && examToShare != null) {
+            String examRole = normalizeExamRole(request.examRole());
+            boolean examCanShare = Boolean.TRUE.equals(request.examCanShare());
+            for (User recipient : recipients) {
+                examService.upsertExamMembership(examToShare, recipient, examRole, examCanShare);
+            }
+        }
+
+        ShareLink shareLink = createShareLink(owner, resourceType, resourceId, request.expiresInHours());
+
+        List<ShareNotification> notifications = recipients.stream()
+                .map(recipient -> {
+                    ShareNotification notification = new ShareNotification();
+                    notification.setSenderUser(owner);
+                    notification.setRecipientUser(recipient);
+                    notification.setShareLink(shareLink);
+                    notification.setResourceType(resourceType);
+                    notification.setResourceId(resourceId);
+                    notification.setResourceName(resourceName);
+                    notification.setMessage(buildNotificationMessage(owner, resourceType, resourceName));
+                    notification.setReadAt(null);
+                    notification.setDeletedAt(null);
+                    return notification;
+                })
+                .toList();
+
+        shareNotificationRepository.saveAll(notifications);
+
+        return new ShareLinkDistributeResponse(
+                shareLink.getId(),
+                resourceType,
+                resourceId,
+                shareLink.getToken(),
+                shareLink.getExpiresAt(),
+                notifications.size());
+    }
+
+    @Transactional(readOnly = true)
+    public List<ShareNotificationResponse> listNotifications(Long userId) {
+        requireUser(userId);
+        return shareNotificationRepository.findByRecipientUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId).stream()
+                .map(this::toNotificationResponse)
+                .toList();
+    }
+
+    @Transactional
+    public ShareNotificationResponse markNotificationAsRead(Long notificationId, Long userId) {
+        requireUser(userId);
+        ShareNotification notification = shareNotificationRepository
+                .findByIdAndRecipientUserIdAndDeletedAtIsNull(notificationId, userId)
+                .orElseThrow(() -> new NotFoundException("Notificacion no encontrada"));
+        if (notification.getReadAt() == null) {
+            notification.setReadAt(LocalDateTime.now());
+            notification = shareNotificationRepository.save(notification);
+        }
+        return toNotificationResponse(notification);
+    }
+
+    private void validateShareLinkIsUsable(ShareLink shareLink) {
+        if (!Boolean.TRUE.equals(shareLink.getActive())) {
+            throw new BadRequestException("Este enlace de comparticion esta inactivo.");
+        }
+
+        LocalDateTime expiresAt = shareLink.getExpiresAt();
+        if (expiresAt != null && LocalDateTime.now().isAfter(expiresAt)) {
+            throw new BadRequestException("Este enlace de comparticion ya expiro.");
+        }
+
+        Integer maxClaims = shareLink.getMaxClaims();
+        Integer claimsCount = shareLink.getClaimsCount();
+        if (maxClaims != null && maxClaims > 0 && claimsCount != null && claimsCount >= maxClaims) {
+            throw new BadRequestException("Este enlace de comparticion alcanzo su limite de usos.");
+        }
+    }
+
+    private User requireUser(Long userId) {
+        return userRepository.findById(userId).orElseThrow(() -> new NotFoundException("Usuario no encontrado"));
+    }
+
+    private int resolveExpiresInHours(Integer value) {
+        if (value == null) {
+            return DEFAULT_EXPIRES_HOURS;
+        }
+        int resolved = value.intValue();
+        if (resolved <= 0 || resolved > MAX_EXPIRES_HOURS) {
+            throw new BadRequestException("expiresInHours debe estar entre 1 y " + MAX_EXPIRES_HOURS);
+        }
+        return resolved;
+    }
+
+    private String generateShareToken() {
+        return UUID.randomUUID().toString().replace("-", "");
+    }
+
+    private String normalizeResourceType(String value) {
+        String normalized = trimOrNull(value);
+        if (normalized == null) {
+            return "";
+        }
+        return normalized.toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeToken(String value) {
+        String normalized = trimOrNull(value);
+        if (normalized == null) {
+            throw new BadRequestException("token es obligatorio");
+        }
+        return normalized;
+    }
+
+    private String normalizeDistributionResourceType(String value) {
+        String normalized = normalizeResourceType(value);
+        if (normalized.equals("exam") || normalized.equals("course") || normalized.equals("sala")) {
+            return normalized;
+        }
+        throw new BadRequestException("resourceType debe ser exam, course o sala");
+    }
+
+    private String normalizeExamRole(String value) {
+        String normalized = trimOrNull(value);
+        if (normalized == null) {
+            return "viewer";
+        }
+        normalized = normalized.toLowerCase(Locale.ROOT);
+        if (normalized.equals("editor")) {
+            return "editor";
+        }
+        return "viewer";
+    }
+
+    private String normalizeExamVisibility(String value) {
+        String normalized = trimOrNull(value);
+        if (normalized == null) {
+            return "private";
+        }
+        normalized = normalized.toLowerCase(Locale.ROOT);
+        if (normalized.equals("public")) {
+            return "public";
+        }
+        return "private";
+    }
+
+    private void validateOwnerCanShareResource(User owner, String resourceType, Long resourceId) {
+        if (resourceType.equals("exam")) {
+            examService.requireExamCanShare(resourceId, owner.getId());
+            return;
+        }
+        if (resourceType.equals("course")) {
+            courseRepository.findByIdAndUserIdAndDeletedAtIsNull(resourceId, owner.getId())
+                    .orElseThrow(() -> new NotFoundException("Curso no encontrado"));
+            return;
+        }
+        if (resourceType.equals("sala")) {
+            if (resourceId <= 0) {
+                throw new BadRequestException("Sala invalida para compartir");
+            }
+            return;
+        }
+        throw new BadRequestException("Tipo de recurso de comparticion invalido");
+    }
+
+    private String resolveResourceName(String resourceType, Long resourceId, String providedName) {
+        String normalizedProvided = trimOrNull(providedName);
+        if (normalizedProvided != null) {
+            return normalizedProvided;
+        }
+        if (resourceType.equals("exam")) {
+            Exam exam = examRepository.findById(resourceId).orElse(null);
+            if (exam != null && exam.getDeletedAt() == null) {
+                String examName = trimOrNull(exam.getName());
+                if (examName != null) {
+                    return examName;
+                }
+            }
+            return "Examen";
+        }
+        if (resourceType.equals("course")) {
+            Course course = courseRepository.findById(resourceId).orElse(null);
+            if (course != null && course.getDeletedAt() == null) {
+                String courseName = trimOrNull(course.getName());
+                if (courseName != null) {
+                    return courseName;
+                }
+            }
+            return "Curso";
+        }
+        return "Sala";
+    }
+
+    private Set<Long> normalizeRecipientIds(List<Long> recipientUserIds, Long senderUserId) {
+        if (recipientUserIds == null || recipientUserIds.isEmpty()) {
+            return Set.of();
+        }
+        Set<Long> normalized = new LinkedHashSet<>();
+        for (Long rawId : recipientUserIds) {
+            if (rawId == null || rawId <= 0 || rawId.equals(senderUserId)) {
+                continue;
+            }
+            normalized.add(rawId);
+        }
+        return normalized;
+    }
+
+    private String buildNotificationMessage(User owner, String resourceType, String resourceName) {
+        String ownerName = trimOrNull(owner.getName());
+        if (ownerName == null) {
+            ownerName = trimOrNull(owner.getUsername());
+        }
+        if (ownerName == null) {
+            ownerName = "Un usuario";
+        }
+
+        String resourceLabel =
+                resourceType.equals("exam") ? "examen" : resourceType.equals("course") ? "curso" : "sala";
+        return ownerName + " te compartio " + resourceLabel + ": " + resourceName;
+    }
+
+    private String trimOrNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private ShareNotificationResponse toNotificationResponse(ShareNotification notification) {
+        User sender = notification.getSenderUser();
+        ShareLink shareLink = notification.getShareLink();
+        String senderName = sender == null ? null : trimOrNull(sender.getName());
+        String senderUsername = sender == null ? null : trimOrNull(sender.getUsername());
+        String resourceType = normalizeResourceType(notification.getResourceType());
+        String resourceName = trimOrNull(notification.getResourceName());
+        if (resourceName == null) {
+            resourceName = resourceType.equals("exam") ? "Examen" : resourceType.equals("course") ? "Curso" : "Sala";
+        }
+
+        return new ShareNotificationResponse(
+                notification.getId(),
+                sender == null ? null : sender.getId(),
+                senderName == null ? "Usuario" : senderName,
+                senderUsername == null ? "" : senderUsername,
+                resourceType,
+                notification.getResourceId(),
+                resourceName,
+                trimOrNull(notification.getMessage()),
+                shareLink == null ? null : trimOrNull(shareLink.getToken()),
+                notification.getReadAt(),
+                notification.getCreatedAt());
+    }
+
+    private ShareLinkResponse toResponse(ShareLink shareLink) {
+        return new ShareLinkResponse(
+                shareLink.getId(),
+                normalizeResourceType(shareLink.getResourceType()),
+                shareLink.getResourceId(),
+                shareLink.getToken(),
+                shareLink.getExpiresAt(),
+                shareLink.getClaimsCount() == null ? 0 : shareLink.getClaimsCount());
+    }
+}

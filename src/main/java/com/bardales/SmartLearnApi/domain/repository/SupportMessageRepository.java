@@ -1,0 +1,10 @@
+package com.bardales.SmartLearnApi.domain.repository;
+
+import com.bardales.SmartLearnApi.domain.entity.SupportMessage;
+import java.util.List;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface SupportMessageRepository extends JpaRepository<SupportMessage, Long> {
+    List<SupportMessage> findByConversationIdAndDeletedAtIsNullOrderByCreatedAtAsc(Long conversationId);
+}
+

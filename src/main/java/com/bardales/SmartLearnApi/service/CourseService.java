@@ -1,0 +1,1149 @@
+package com.bardales.SmartLearnApi.service;
+
+import com.bardales.SmartLearnApi.domain.entity.Course;
+import com.bardales.SmartLearnApi.domain.entity.CourseCompetency;
+import com.bardales.SmartLearnApi.domain.entity.CourseExam;
+import com.bardales.SmartLearnApi.domain.entity.CourseMembership;
+import com.bardales.SmartLearnApi.domain.entity.CourseSession;
+import com.bardales.SmartLearnApi.domain.entity.CourseSessionContent;
+import com.bardales.SmartLearnApi.domain.entity.Exam;
+import com.bardales.SmartLearnApi.domain.entity.ExamAttempt;
+import com.bardales.SmartLearnApi.domain.entity.User;
+import com.bardales.SmartLearnApi.domain.repository.CourseCompetencyRepository;
+import com.bardales.SmartLearnApi.domain.repository.CourseExamRepository;
+import com.bardales.SmartLearnApi.domain.repository.CourseMembershipRepository;
+import com.bardales.SmartLearnApi.domain.repository.CourseRepository;
+import com.bardales.SmartLearnApi.domain.repository.CourseSessionContentRepository;
+import com.bardales.SmartLearnApi.domain.repository.CourseSessionRepository;
+import com.bardales.SmartLearnApi.domain.repository.ExamAttemptRepository;
+import com.bardales.SmartLearnApi.domain.repository.ExamRepository;
+import com.bardales.SmartLearnApi.domain.repository.UserRepository;
+import com.bardales.SmartLearnApi.dto.course.CourseCompetencyItemResponse;
+import com.bardales.SmartLearnApi.dto.course.CourseCompetencySaveRequest;
+import com.bardales.SmartLearnApi.dto.course.CourseCreateRequest;
+import com.bardales.SmartLearnApi.dto.course.CourseExamItemResponse;
+import com.bardales.SmartLearnApi.dto.course.CourseGradeItemResponse;
+import com.bardales.SmartLearnApi.dto.course.CourseModuleResponse;
+import com.bardales.SmartLearnApi.dto.course.CourseParticipantItemResponse;
+import com.bardales.SmartLearnApi.dto.course.CourseParticipantRoleUpdateRequest;
+import com.bardales.SmartLearnApi.dto.course.CourseParticipantSaveRequest;
+import com.bardales.SmartLearnApi.dto.course.CourseResponse;
+import com.bardales.SmartLearnApi.dto.course.CourseSessionContentItemResponse;
+import com.bardales.SmartLearnApi.dto.course.CourseSessionContentPracticeStartResponse;
+import com.bardales.SmartLearnApi.dto.course.CourseSessionContentSaveRequest;
+import com.bardales.SmartLearnApi.dto.course.CourseSessionCreateRequest;
+import com.bardales.SmartLearnApi.dto.course.CourseSessionItemResponse;
+import com.bardales.SmartLearnApi.dto.course.CourseSessionUpdateRequest;
+import com.bardales.SmartLearnApi.dto.course.CourseSetExamsRequest;
+import com.bardales.SmartLearnApi.dto.course.CourseUpdateRequest;
+import com.bardales.SmartLearnApi.exception.BadRequestException;
+import com.bardales.SmartLearnApi.exception.NotFoundException;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+public class CourseService {
+
+    private final CourseRepository courseRepository;
+    private final CourseMembershipRepository courseMembershipRepository;
+    private final CourseExamRepository courseExamRepository;
+    private final CourseSessionRepository courseSessionRepository;
+    private final CourseSessionContentRepository courseSessionContentRepository;
+    private final CourseCompetencyRepository courseCompetencyRepository;
+    private final ExamAttemptRepository examAttemptRepository;
+    private final ExamRepository examRepository;
+    private final UserRepository userRepository;
+    private final ExamService examService;
+
+    public CourseService(
+            CourseRepository courseRepository,
+            CourseMembershipRepository courseMembershipRepository,
+            CourseExamRepository courseExamRepository,
+            CourseSessionRepository courseSessionRepository,
+            CourseSessionContentRepository courseSessionContentRepository,
+            CourseCompetencyRepository courseCompetencyRepository,
+            ExamAttemptRepository examAttemptRepository,
+            ExamRepository examRepository,
+            UserRepository userRepository,
+            ExamService examService) {
+        this.courseRepository = courseRepository;
+        this.courseMembershipRepository = courseMembershipRepository;
+        this.courseExamRepository = courseExamRepository;
+        this.courseSessionRepository = courseSessionRepository;
+        this.courseSessionContentRepository = courseSessionContentRepository;
+        this.courseCompetencyRepository = courseCompetencyRepository;
+        this.examAttemptRepository = examAttemptRepository;
+        this.examRepository = examRepository;
+        this.userRepository = userRepository;
+        this.examService = examService;
+    }
+
+    @Transactional(readOnly = true)
+    public CourseModuleResponse getModule(Long userId) {
+        requireUser(userId);
+
+        Map<Long, Course> coursesById = new LinkedHashMap<>();
+
+        List<Course> ownedCourses = courseRepository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId);
+        for (Course course : ownedCourses) {
+            if (course == null || course.getId() == null) {
+                continue;
+            }
+            coursesById.put(course.getId(), course);
+        }
+
+        List<CourseMembership> sharedMemberships =
+                courseMembershipRepository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId);
+        for (CourseMembership membership : sharedMemberships) {
+            if (membership == null) {
+                continue;
+            }
+            Course sharedCourse = membership.getCourse();
+            if (sharedCourse == null || sharedCourse.getDeletedAt() != null || sharedCourse.getId() == null) {
+                continue;
+            }
+            coursesById.putIfAbsent(sharedCourse.getId(), sharedCourse);
+        }
+
+        List<Course> publicCourses = courseRepository.findByVisibilityIgnoreCaseAndDeletedAtIsNullOrderByCreatedAtDesc("public");
+        for (Course publicCourse : publicCourses) {
+            if (publicCourse == null || publicCourse.getId() == null) {
+                continue;
+            }
+            coursesById.putIfAbsent(publicCourse.getId(), publicCourse);
+        }
+
+        List<CourseResponse> courses = coursesById.values().stream().map(this::toCourseResponse).toList();
+
+        List<CourseExamItemResponse> availableExams = examRepository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId)
+                .stream()
+                .map(this::toExamItem)
+                .toList();
+
+        return new CourseModuleResponse(courses, availableExams);
+    }
+
+    @Transactional
+    public CourseResponse createCourse(CourseCreateRequest request) {
+        User user = requireUser(request.userId());
+        String name = trimOrNull(request.name());
+
+        if (name == null) {
+            throw new BadRequestException("name es obligatorio");
+        }
+
+        Course course = new Course();
+        course.setUser(user);
+        course.setName(name);
+        course.setDescription(trimOrNull(request.description()));
+        course.setCoverImageData(trimOrNull(request.coverImageData()));
+        course.setCode(resolveCourseCode(request.code(), name, null));
+        course.setVisibility(normalizeCourseVisibility(request.visibility(), true));
+        course.setPriority(normalizeCoursePriority(request.priority(), true));
+        course.setSortOrder(normalizeCourseSortOrder(request.sortOrder(), true));
+        course = courseRepository.save(course);
+
+        return toCourseResponse(course);
+    }
+
+    @Transactional
+    public CourseResponse addCourseParticipant(Long courseId, CourseParticipantSaveRequest request) {
+        Course course = requireCourseOwned(courseId, request.userId());
+
+        String identifier = trimOrNull(request.identifier());
+        if (identifier == null) {
+            throw new BadRequestException("identifier es obligatorio");
+        }
+        User participantUser = findUserByIdentifier(identifier);
+        Long ownerUserId = course.getUser() == null ? null : course.getUser().getId();
+        Long participantUserId = participantUser.getId();
+        if (ownerUserId != null && ownerUserId.equals(participantUserId)) {
+            throw new BadRequestException("El creador del curso ya forma parte del curso");
+        }
+
+        String role = normalizeCourseMembershipRole(request.role(), true);
+        CourseMembership membership = courseMembershipRepository
+                .findByCourseIdAndUserId(course.getId(), participantUserId)
+                .orElseGet(() -> {
+                    CourseMembership created = new CourseMembership();
+                    created.setCourse(course);
+                    created.setUser(participantUser);
+                    return created;
+                });
+        membership.setCourse(course);
+        membership.setUser(participantUser);
+        membership.setRole(role);
+        membership.setDeletedAt(null);
+        courseMembershipRepository.save(membership);
+
+        return toCourseResponse(course);
+    }
+
+    @Transactional
+    public CourseResponse updateCourseParticipantRole(
+            Long courseId, Long participantUserId, CourseParticipantRoleUpdateRequest request) {
+        Course course = requireCourseOwned(courseId, request.userId());
+        Long ownerUserId = course.getUser() == null ? null : course.getUser().getId();
+        if (ownerUserId != null && ownerUserId.equals(participantUserId)) {
+            throw new BadRequestException("No se puede cambiar el rol del creador del curso");
+        }
+
+        CourseMembership membership = courseMembershipRepository
+                .findByCourseIdAndUserIdAndDeletedAtIsNull(course.getId(), participantUserId)
+                .orElseThrow(() -> new NotFoundException("Participante no encontrado"));
+        membership.setRole(normalizeCourseMembershipRole(request.role(), true));
+        courseMembershipRepository.save(membership);
+
+        return toCourseResponse(course);
+    }
+
+    @Transactional
+    public CourseResponse removeCourseParticipant(Long courseId, Long participantUserId, Long userId) {
+        Course course = requireCourseOwned(courseId, userId);
+        Long ownerUserId = course.getUser() == null ? null : course.getUser().getId();
+        if (ownerUserId != null && ownerUserId.equals(participantUserId)) {
+            throw new BadRequestException("No se puede quitar al creador del curso");
+        }
+
+        CourseMembership membership = courseMembershipRepository
+                .findByCourseIdAndUserIdAndDeletedAtIsNull(course.getId(), participantUserId)
+                .orElseThrow(() -> new NotFoundException("Participante no encontrado"));
+        membership.setDeletedAt(LocalDateTime.now());
+        courseMembershipRepository.save(membership);
+
+        return toCourseResponse(course);
+    }
+
+    @Transactional
+    public CourseResponse addCourseCompetency(Long courseId, CourseCompetencySaveRequest request) {
+        Course course = requireCourseOwned(courseId, request.userId());
+        String name = trimOrNull(request.name());
+        if (name == null) {
+            throw new BadRequestException("name es obligatorio");
+        }
+
+        CourseCompetency competency = new CourseCompetency();
+        competency.setCourse(course);
+        competency.setName(name);
+        competency.setDescription(trimOrNull(request.description()));
+        competency.setLevel(normalizeCourseCompetencyLevel(request.level(), true));
+        competency.setSortOrder(normalizeCourseSortOrder(request.sortOrder(), true));
+        courseCompetencyRepository.save(competency);
+
+        return toCourseResponse(course);
+    }
+
+    @Transactional
+    public CourseResponse updateCourseCompetency(Long courseId, Long competencyId, CourseCompetencySaveRequest request) {
+        Course course = requireCourseOwned(courseId, request.userId());
+        CourseCompetency competency = courseCompetencyRepository
+                .findByIdAndCourseIdAndDeletedAtIsNull(competencyId, course.getId())
+                .orElseThrow(() -> new NotFoundException("Competencia no encontrada"));
+
+        String name = trimOrNull(request.name());
+        if (name == null) {
+            throw new BadRequestException("name es obligatorio");
+        }
+        competency.setName(name);
+        competency.setDescription(trimOrNull(request.description()));
+        competency.setLevel(normalizeCourseCompetencyLevel(request.level(), true));
+        competency.setSortOrder(normalizeCourseSortOrder(request.sortOrder(), true));
+        courseCompetencyRepository.save(competency);
+
+        return toCourseResponse(course);
+    }
+
+    @Transactional
+    public CourseResponse deleteCourseCompetency(Long courseId, Long competencyId, Long userId) {
+        Course course = requireCourseOwned(courseId, userId);
+        CourseCompetency competency = courseCompetencyRepository
+                .findByIdAndCourseIdAndDeletedAtIsNull(competencyId, course.getId())
+                .orElseThrow(() -> new NotFoundException("Competencia no encontrada"));
+        competency.setDeletedAt(LocalDateTime.now());
+        courseCompetencyRepository.save(competency);
+
+        return toCourseResponse(course);
+    }
+
+    @Transactional
+    public CourseResponse createCourseSession(Long courseId, CourseSessionCreateRequest request) {
+        Course course = requireCourseOwned(courseId, request.userId());
+        String sessionName = trimOrNull(request.name());
+
+        if (sessionName == null) {
+            throw new BadRequestException("name es obligatorio");
+        }
+
+        CourseSession session = new CourseSession();
+        session.setCourse(course);
+        session.setName(sessionName);
+        session.setWeeklyContent(trimOrNull(request.weeklyContent()));
+        courseSessionRepository.save(session);
+
+        return toCourseResponse(course);
+    }
+
+    @Transactional
+    public CourseResponse updateCourseSession(Long courseId, Long sessionId, CourseSessionUpdateRequest request) {
+        CourseSession session = requireCourseSessionOwnedByUser(sessionId, request.userId());
+        Course course = session.getCourse();
+        if (course == null || course.getDeletedAt() != null || !course.getId().equals(courseId)) {
+            throw new NotFoundException("Curso no encontrado");
+        }
+        String sessionName = trimOrNull(request.name());
+        if (sessionName == null) {
+            throw new BadRequestException("name es obligatorio");
+        }
+        session.setName(sessionName);
+        session.setWeeklyContent(trimOrNull(request.weeklyContent()));
+        courseSessionRepository.save(session);
+        return toCourseResponse(course);
+    }
+
+    @Transactional
+    public CourseResponse addCourseSessionContent(
+            Long courseId, Long sessionId, CourseSessionContentSaveRequest request) {
+        CourseSession session = requireCourseSessionOwnedByUser(sessionId, request.userId());
+        Course course = session.getCourse();
+        if (course == null || course.getDeletedAt() != null || !course.getId().equals(courseId)) {
+            throw new NotFoundException("Curso no encontrado");
+        }
+        String type = normalizeContentType(request.type());
+        String title = trimOrNull(request.title());
+        if (title == null) {
+            throw new BadRequestException("title es obligatorio");
+        }
+
+        CourseSessionContent content = new CourseSessionContent();
+        content.setCourseSession(session);
+        content.setType(type);
+        content.setTitle(title);
+        applyContentData(
+                content,
+                type,
+                request.externalLink(),
+                request.fileName(),
+                request.fileData(),
+                request.sourceExamId(),
+                request.userId());
+        courseSessionContentRepository.save(content);
+
+        return toCourseResponse(course);
+    }
+
+    @Transactional
+    public CourseResponse updateCourseSessionContent(
+            Long courseId, Long sessionId, Long contentId, CourseSessionContentSaveRequest request) {
+        CourseSession session = requireCourseSessionOwnedByUser(sessionId, request.userId());
+        Course course = session.getCourse();
+        if (course == null || course.getDeletedAt() != null || !course.getId().equals(courseId)) {
+            throw new NotFoundException("Curso no encontrado");
+        }
+        CourseSessionContent content = courseSessionContentRepository
+                .findByIdAndCourseSessionIdAndDeletedAtIsNull(contentId, session.getId())
+                .orElseThrow(() -> new NotFoundException("Contenido de sesion no encontrado"));
+
+        String type = request.type() == null ? trimOrNull(content.getType()) : normalizeContentType(request.type());
+        if (type == null) {
+            throw new BadRequestException("type es obligatorio");
+        }
+
+        String title = request.title() == null ? trimOrNull(content.getTitle()) : trimOrNull(request.title());
+        if (title == null) {
+            throw new BadRequestException("title es obligatorio");
+        }
+
+        content.setType(type);
+        content.setTitle(title);
+        Long resolvedSourceExamId = request.sourceExamId() == null
+                ? (content.getSourceExam() == null ? null : content.getSourceExam().getId())
+                : request.sourceExamId();
+        applyContentData(
+                content,
+                type,
+                request.externalLink() == null ? content.getExternalLink() : request.externalLink(),
+                request.fileName() == null ? content.getFileName() : request.fileName(),
+                request.fileData() == null ? content.getFileData() : request.fileData(),
+                resolvedSourceExamId,
+                request.userId());
+        courseSessionContentRepository.save(content);
+        return toCourseResponse(course);
+    }
+
+    @Transactional
+    public CourseSessionContentPracticeStartResponse startCourseSessionContentPractice(
+            Long courseId, Long sessionId, Long contentId, Long userId) {
+        requireUser(userId);
+
+        CourseSession session = courseSessionRepository
+                .findById(sessionId)
+                .orElseThrow(() -> new NotFoundException("Sesion no encontrada"));
+        if (session.getDeletedAt() != null) {
+            throw new NotFoundException("Sesion no encontrada");
+        }
+        Course course = session.getCourse();
+        if (course == null || course.getDeletedAt() != null || !course.getId().equals(courseId)) {
+            throw new NotFoundException("Curso no encontrado");
+        }
+        if (!hasCourseAccess(course, userId)) {
+            throw new NotFoundException("Curso no encontrado");
+        }
+
+        CourseSessionContent content = courseSessionContentRepository
+                .findByIdAndCourseSessionIdAndDeletedAtIsNull(contentId, session.getId())
+                .orElseThrow(() -> new NotFoundException("Contenido de sesion no encontrado"));
+
+        String contentType = trimOrNull(content.getType());
+        if (contentType == null || !contentType.equals("exam")) {
+            throw new BadRequestException("Este contenido no corresponde a un examen");
+        }
+
+        Exam sourceExam = content.getSourceExam();
+        if (sourceExam == null || sourceExam.getDeletedAt() != null) {
+            throw new BadRequestException("Este contenido no tiene un examen asociado");
+        }
+
+        String cloneSourcePath = "course-content://" + content.getId() + "/source/" + sourceExam.getId();
+        Exam userExam = examService.ensureExamAvailableForUser(sourceExam.getId(), userId, cloneSourcePath);
+        String examName = trimOrNull(userExam.getName());
+        if (examName == null) {
+            examName = "examen";
+        }
+        return new CourseSessionContentPracticeStartResponse(userExam.getId(), examName);
+    }
+
+    @Transactional
+    public CourseResponse setCourseExams(Long courseId, CourseSetExamsRequest request) {
+        Course course = requireCourseOwned(courseId, request.userId());
+        List<Long> requestedExamIds = normalizeExamIds(request.examIds());
+
+        Map<Long, Exam> examsById = new LinkedHashMap<>();
+        if (!requestedExamIds.isEmpty()) {
+            List<Exam> exams = examRepository.findByIdInAndUserIdAndDeletedAtIsNull(requestedExamIds, request.userId());
+            if (exams.size() != requestedExamIds.size()) {
+                throw new BadRequestException("Uno o mas examenes no existen o no pertenecen al usuario");
+            }
+            examsById = exams.stream().collect(
+                    LinkedHashMap::new,
+                    (map, exam) -> map.put(exam.getId(), exam),
+                    Map::putAll);
+        }
+
+        courseExamRepository.deleteByCourseId(course.getId());
+
+        if (!requestedExamIds.isEmpty()) {
+            List<CourseExam> associations = new ArrayList<>();
+            for (Long examId : requestedExamIds) {
+                Exam exam = examsById.get(examId);
+                if (exam == null) {
+                    throw new BadRequestException("Examen invalido para asociar al curso");
+                }
+                CourseExam association = new CourseExam();
+                association.setCourse(course);
+                association.setExam(exam);
+                associations.add(association);
+            }
+            courseExamRepository.saveAll(associations);
+        }
+
+        return toCourseResponse(course);
+    }
+
+    @Transactional
+    public CourseResponse updateCourse(Long courseId, CourseUpdateRequest request) {
+        Course course = requireCourseOwned(courseId, request.userId());
+        String name = trimOrNull(request.name());
+
+        if (name == null) {
+            throw new BadRequestException("name es obligatorio");
+        }
+
+        course.setName(name);
+        course.setDescription(trimOrNull(request.description()));
+        String visibility = request.visibility() == null
+                ? normalizeCourseVisibility(course.getVisibility(), false)
+                : normalizeCourseVisibility(request.visibility(), true);
+        course.setVisibility(visibility);
+        String priority = request.priority() == null
+                ? normalizeCoursePriority(course.getPriority(), false)
+                : normalizeCoursePriority(request.priority(), true);
+        course.setPriority(priority);
+        Integer sortOrder = request.sortOrder() == null
+                ? normalizeCourseSortOrder(course.getSortOrder(), false)
+                : normalizeCourseSortOrder(request.sortOrder(), true);
+        course.setSortOrder(sortOrder);
+        String code = request.code() == null
+                ? normalizeCourseCode(course.getCode())
+                : resolveCourseCode(request.code(), name, course.getId());
+        if (code == null) {
+            code = resolveCourseCode(null, name, course.getId());
+        }
+        course.setCode(code);
+        course = courseRepository.save(course);
+        return toCourseResponse(course);
+    }
+
+    @Transactional
+    public void deleteCourse(Long courseId, Long userId) {
+        Course course = requireCourseOwned(courseId, userId);
+        course.setDeletedAt(LocalDateTime.now());
+        courseRepository.save(course);
+        courseExamRepository.deleteByCourseId(course.getId());
+    }
+
+    private Course requireCourseOwned(Long courseId, Long userId) {
+        requireUser(userId);
+        return courseRepository.findByIdAndUserIdAndDeletedAtIsNull(courseId, userId)
+                .orElseThrow(() -> new NotFoundException("Curso no encontrado"));
+    }
+
+    private User requireUser(Long userId) {
+        return userRepository.findById(userId).orElseThrow(() -> new NotFoundException("Usuario no encontrado"));
+    }
+
+    private User findUserByIdentifier(String identifier) {
+        return userRepository
+                .findByEmailIgnoreCaseOrUsernameIgnoreCase(identifier, identifier)
+                .orElseThrow(() -> new NotFoundException("Usuario destino no encontrado"));
+    }
+
+    private CourseSession requireCourseSessionOwnedByUser(Long sessionId, Long userId) {
+        requireUser(userId);
+        return courseSessionRepository
+                .findByIdAndCourseUserIdAndDeletedAtIsNull(sessionId, userId)
+                .orElseThrow(() -> new NotFoundException("Sesion no encontrada"));
+    }
+
+    private boolean hasCourseAccess(Course course, Long userId) {
+        User owner = course.getUser();
+        if (owner != null && owner.getId() != null && owner.getId().equals(userId)) {
+            return true;
+        }
+        if ("public".equals(normalizeCourseVisibility(course.getVisibility(), false))) {
+            return true;
+        }
+        return courseMembershipRepository
+                .findByCourseIdAndUserIdAndDeletedAtIsNull(course.getId(), userId)
+                .isPresent();
+    }
+
+    private List<Long> normalizeExamIds(List<Long> examIds) {
+        if (examIds == null || examIds.isEmpty()) {
+            return List.of();
+        }
+        return examIds.stream()
+                .filter(value -> value != null && value > 0)
+                .map(Long::longValue)
+                .distinct()
+                .toList();
+    }
+
+    private String trimOrNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String normalizeCourseCode(String rawCode) {
+        String value = trimOrNull(rawCode);
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.toUpperCase(Locale.ROOT);
+        normalized = normalized.replaceAll("\\s+", "-");
+        normalized = normalized.replaceAll("[^A-Z0-9_-]", "");
+        normalized = normalized.replaceAll("[-_]{2,}", "-");
+        normalized = normalized.replaceAll("^[-_]+|[-_]+$", "");
+        if (normalized.isBlank()) {
+            return null;
+        }
+        if (normalized.length() > 40) {
+            normalized = normalized.substring(0, 40);
+        }
+        return normalized;
+    }
+
+    private String normalizeCourseVisibility(String rawVisibility, boolean strict) {
+        String value = trimOrNull(rawVisibility);
+        if (value == null) {
+            return "public";
+        }
+        String normalized = value.toLowerCase(Locale.ROOT);
+        if (normalized.equals("public") || normalized.equals("private")) {
+            return normalized;
+        }
+        if (strict) {
+            throw new BadRequestException("visibility debe ser public o private");
+        }
+        return "public";
+    }
+
+    private String normalizeCoursePriority(String rawPriority, boolean strict) {
+        String value = trimOrNull(rawPriority);
+        if (value == null) {
+            return "important";
+        }
+        String normalized = value.toLowerCase(Locale.ROOT);
+        if (normalized.equals("very_important")
+                || normalized.equals("important")
+                || normalized.equals("low_important")
+                || normalized.equals("optional")) {
+            return normalized;
+        }
+        if (strict) {
+            throw new BadRequestException("priority debe ser very_important, important, low_important u optional");
+        }
+        return "important";
+    }
+
+    private Integer normalizeCourseSortOrder(Integer rawSortOrder, boolean strict) {
+        if (rawSortOrder == null) {
+            return 0;
+        }
+        if (rawSortOrder < 0) {
+            if (strict) {
+                throw new BadRequestException("sortOrder debe ser mayor o igual a 0");
+            }
+            return 0;
+        }
+        return rawSortOrder;
+    }
+
+    private String normalizeCourseMembershipRole(String rawRole, boolean strict) {
+        String value = trimOrNull(rawRole);
+        if (value == null) {
+            return "viewer";
+        }
+        String normalized = value.toLowerCase(Locale.ROOT);
+        if (normalized.equals("viewer") || normalized.equals("editor") || normalized.equals("assistant")) {
+            return normalized;
+        }
+        if (strict) {
+            throw new BadRequestException("role debe ser viewer, editor o assistant");
+        }
+        return "viewer";
+    }
+
+    private String normalizeCourseCompetencyLevel(String rawLevel, boolean strict) {
+        String value = trimOrNull(rawLevel);
+        if (value == null) {
+            return "basico";
+        }
+        String normalized = value.toLowerCase(Locale.ROOT);
+        if (normalized.equals("basico") || normalized.equals("intermedio") || normalized.equals("avanzado")) {
+            return normalized;
+        }
+        if (strict) {
+            throw new BadRequestException("level debe ser basico, intermedio o avanzado");
+        }
+        return "basico";
+    }
+
+    private String resolveCourseCode(String rawCode, String courseName, Long excludingCourseId) {
+        String normalizedProvidedCode = normalizeCourseCode(rawCode);
+        if (normalizedProvidedCode != null) {
+            if (courseCodeExists(normalizedProvidedCode, excludingCourseId)) {
+                throw new BadRequestException("El codigo del curso ya existe");
+            }
+            return normalizedProvidedCode;
+        }
+
+        String rawValue = trimOrNull(rawCode);
+        if (rawValue != null) {
+            throw new BadRequestException("El codigo del curso es invalido");
+        }
+
+        String basePrefix = normalizeCourseCode(courseName);
+        if (basePrefix == null) {
+            basePrefix = "CURSO";
+        } else if (basePrefix.length() > 12) {
+            basePrefix = basePrefix.substring(0, 12);
+        }
+
+        for (int attempt = 0; attempt < 40; attempt++) {
+            long nowPart = Math.abs(System.currentTimeMillis() + attempt);
+            long nanoPart = Math.abs(System.nanoTime() % 10000L);
+            String candidate = basePrefix + "-" + Long.toString(nowPart, 36).toUpperCase(Locale.ROOT)
+                    + String.format(Locale.ROOT, "%04d", nanoPart);
+            if (candidate.length() > 40) {
+                candidate = candidate.substring(0, 40);
+            }
+            if (!courseCodeExists(candidate, excludingCourseId)) {
+                return candidate;
+            }
+        }
+
+        throw new BadRequestException("No se pudo generar un codigo unico para el curso");
+    }
+
+    private boolean courseCodeExists(String code, Long excludingCourseId) {
+        if (excludingCourseId == null) {
+            return courseRepository.existsByCodeIgnoreCaseAndDeletedAtIsNull(code);
+        }
+        return courseRepository.existsByCodeIgnoreCaseAndDeletedAtIsNullAndIdNot(code, excludingCourseId);
+    }
+
+    private CourseResponse toCourseResponse(Course course) {
+        List<CourseSessionItemResponse> sessions = courseSessionRepository
+                .findByCourseIdAndDeletedAtIsNullOrderByCreatedAtDesc(course.getId())
+                .stream()
+                .map(this::toCourseSessionItem)
+                .toList();
+
+        List<CourseExamItemResponse> exams = courseExamRepository.findByCourseIdOrderByCreatedAtAsc(course.getId()).stream()
+                .map(CourseExam::getExam)
+                .filter(exam -> exam != null && exam.getDeletedAt() == null)
+                .map(this::toExamItem)
+                .toList();
+
+        List<CourseParticipantItemResponse> participants = buildCourseParticipants(course);
+        List<CourseCompetencyItemResponse> competencies = buildCourseCompetencies(course);
+        List<Long> resolvedExamIds = resolveCourseExamIds(exams, sessions);
+        List<CourseGradeItemResponse> grades = buildCourseGrades(participants, resolvedExamIds);
+
+        String normalizedName = course.getName() == null ? "" : course.getName().trim();
+        if (normalizedName.isEmpty()) {
+            normalizedName = "curso";
+        }
+        String normalizedDescription = trimOrNull(course.getDescription());
+        String normalizedCoverImageData = trimOrNull(course.getCoverImageData());
+        String normalizedCode = normalizeCourseCode(course.getCode());
+        if (normalizedCode == null) {
+            Long courseId = course.getId();
+            normalizedCode = courseId == null ? "CURSO-SIN-CODIGO" : "CURSO-" + courseId;
+        }
+        String normalizedVisibility = normalizeCourseVisibility(course.getVisibility(), false);
+        String normalizedPriority = normalizeCoursePriority(course.getPriority(), false);
+        Integer normalizedSortOrder = normalizeCourseSortOrder(course.getSortOrder(), false);
+        Long ownerUserId = course.getUser() == null ? null : course.getUser().getId();
+
+        return new CourseResponse(
+                course.getId(),
+                normalizedName,
+                normalizedDescription,
+                normalizedCoverImageData,
+                normalizedCode,
+                normalizedVisibility,
+                normalizedPriority,
+                normalizedSortOrder,
+                ownerUserId,
+                sessions,
+                exams,
+                participants,
+                grades,
+                competencies,
+                course.getCreatedAt());
+    }
+
+    private List<Long> resolveCourseExamIds(List<CourseExamItemResponse> exams, List<CourseSessionItemResponse> sessions) {
+        Set<Long> examIds = new LinkedHashSet<>();
+        for (CourseExamItemResponse exam : exams) {
+            if (exam != null && exam.id() != null && exam.id() > 0) {
+                examIds.add(exam.id());
+            }
+        }
+        for (CourseSessionItemResponse session : sessions) {
+            if (session == null || session.contents() == null) {
+                continue;
+            }
+            for (CourseSessionContentItemResponse content : session.contents()) {
+                if (content == null) {
+                    continue;
+                }
+                String contentType = trimOrNull(content.type());
+                if (contentType == null || !contentType.equalsIgnoreCase("exam")) {
+                    continue;
+                }
+                Long sourceExamId = content.sourceExamId();
+                if (sourceExamId != null && sourceExamId > 0) {
+                    examIds.add(sourceExamId);
+                }
+            }
+        }
+        return new ArrayList<>(examIds);
+    }
+
+    private List<CourseParticipantItemResponse> buildCourseParticipants(Course course) {
+        List<CourseParticipantItemResponse> participants = new ArrayList<>();
+
+        User owner = course.getUser();
+        if (owner != null && owner.getId() != null) {
+            participants.add(toCourseParticipantItem(owner, null, true, course.getCreatedAt()));
+        }
+
+        List<CourseMembership> memberships =
+                courseMembershipRepository.findByCourseIdAndDeletedAtIsNullOrderByCreatedAtAsc(course.getId());
+        Long ownerUserId = owner == null ? null : owner.getId();
+        for (CourseMembership membership : memberships) {
+            if (membership == null) {
+                continue;
+            }
+            User participantUser = membership.getUser();
+            if (participantUser == null || participantUser.getId() == null) {
+                continue;
+            }
+            if (ownerUserId != null && ownerUserId.equals(participantUser.getId())) {
+                continue;
+            }
+            participants.add(toCourseParticipantItem(participantUser, membership, false, membership.getCreatedAt()));
+        }
+
+        return participants;
+    }
+
+    private CourseParticipantItemResponse toCourseParticipantItem(
+            User user, CourseMembership membership, boolean owner, LocalDateTime joinedAt) {
+        String name = trimOrNull(user.getName());
+        String username = trimOrNull(user.getUsername());
+        String email = trimOrNull(user.getEmail());
+        if (username == null) {
+            Long userId = user.getId();
+            username = userId == null ? "user" : "user" + userId;
+        }
+        if (name == null) {
+            name = username;
+        }
+        if (email == null) {
+            email = "sin-correo@local";
+        }
+        String role = owner
+                ? "owner"
+                : normalizeCourseMembershipRole(membership == null ? null : membership.getRole(), false);
+        Long membershipId = membership == null ? null : membership.getId();
+        return new CourseParticipantItemResponse(membershipId, user.getId(), name, username, email, role, owner, joinedAt);
+    }
+
+    private List<CourseCompetencyItemResponse> buildCourseCompetencies(Course course) {
+        return courseCompetencyRepository
+                .findByCourseIdAndDeletedAtIsNullOrderBySortOrderAscCreatedAtAsc(course.getId())
+                .stream()
+                .map(this::toCourseCompetencyItem)
+                .toList();
+    }
+
+    private CourseCompetencyItemResponse toCourseCompetencyItem(CourseCompetency competency) {
+        return new CourseCompetencyItemResponse(
+                competency.getId(),
+                trimOrNull(competency.getName()),
+                trimOrNull(competency.getDescription()),
+                normalizeCourseCompetencyLevel(competency.getLevel(), false),
+                normalizeCourseSortOrder(competency.getSortOrder(), false),
+                competency.getCreatedAt());
+    }
+
+    private List<CourseGradeItemResponse> buildCourseGrades(
+            List<CourseParticipantItemResponse> participants, List<Long> resolvedExamIds) {
+        if (participants.isEmpty()) {
+            return List.of();
+        }
+
+        Map<Long, GradeAccumulator> gradeByUserId = new LinkedHashMap<>();
+        for (CourseParticipantItemResponse participant : participants) {
+            if (participant == null || participant.userId() == null || gradeByUserId.containsKey(participant.userId())) {
+                continue;
+            }
+            gradeByUserId.put(participant.userId(), new GradeAccumulator(participant));
+        }
+
+        if (!gradeByUserId.isEmpty() && !resolvedExamIds.isEmpty()) {
+            List<Long> validExamIds = resolvedExamIds.stream().filter(id -> id != null && id > 0).distinct().toList();
+            if (!validExamIds.isEmpty()) {
+                List<Long> participantUserIds = new ArrayList<>(gradeByUserId.keySet());
+                List<ExamAttempt> attempts = examAttemptRepository.findByExamIdInAndUserIdIn(validExamIds, participantUserIds);
+                for (ExamAttempt attempt : attempts) {
+                    if (attempt == null || attempt.getUser() == null || attempt.getUser().getId() == null) {
+                        continue;
+                    }
+                    GradeAccumulator accumulator = gradeByUserId.get(attempt.getUser().getId());
+                    if (accumulator == null) {
+                        continue;
+                    }
+                    accumulator.registerAttempt(attempt, calculateAttemptScorePercent(attempt));
+                }
+            }
+        }
+
+        return gradeByUserId.values().stream().map(GradeAccumulator::toResponse).toList();
+    }
+
+    private double calculateAttemptScorePercent(ExamAttempt attempt) {
+        int totalPoints = attempt.getTotalPoints() == null ? 0 : attempt.getTotalPoints();
+        int scoredPoints = attempt.getScoredPoints() == null ? 0 : attempt.getScoredPoints();
+        double result;
+        if (totalPoints > 0) {
+            result = (scoredPoints * 100.0d) / totalPoints;
+        } else {
+            int totalQuestions = attempt.getTotalQuestions() == null ? 0 : attempt.getTotalQuestions();
+            int correctCount = attempt.getCorrectCount() == null ? 0 : attempt.getCorrectCount();
+            result = totalQuestions > 0 ? (correctCount * 100.0d) / totalQuestions : 0.0d;
+        }
+        if (result < 0.0d) {
+            result = 0.0d;
+        }
+        if (result > 100.0d) {
+            result = 100.0d;
+        }
+        return roundScoreValue(result);
+    }
+
+    private static double roundScoreValue(double value) {
+        return Math.round(value * 100.0d) / 100.0d;
+    }
+
+    private static Double roundNullable(Double value) {
+        return value == null ? null : roundScoreValue(value);
+    }
+
+    private static LocalDateTime resolveAttemptDate(ExamAttempt attempt) {
+        if (attempt.getFinishedAt() != null) {
+            return attempt.getFinishedAt();
+        }
+        if (attempt.getUpdatedAt() != null) {
+            return attempt.getUpdatedAt();
+        }
+        return attempt.getCreatedAt();
+    }
+
+    private static final class GradeAccumulator {
+        private final CourseParticipantItemResponse participant;
+        private int attemptsCount = 0;
+        private double scoreSum = 0.0d;
+        private Double bestScore = null;
+        private Double lastScore = null;
+        private LocalDateTime lastAttemptAt = null;
+
+        private GradeAccumulator(CourseParticipantItemResponse participant) {
+            this.participant = participant;
+        }
+
+        private void registerAttempt(ExamAttempt attempt, double scorePercent) {
+            attemptsCount += 1;
+            scoreSum += scorePercent;
+            if (bestScore == null || scorePercent > bestScore) {
+                bestScore = scorePercent;
+            }
+
+            LocalDateTime attemptDate = resolveAttemptDate(attempt);
+            if (attemptDate == null) {
+                if (lastScore == null) {
+                    lastScore = scorePercent;
+                }
+                return;
+            }
+            if (lastAttemptAt == null || attemptDate.isAfter(lastAttemptAt)) {
+                lastAttemptAt = attemptDate;
+                lastScore = scorePercent;
+            } else if (lastScore == null) {
+                lastScore = scorePercent;
+            }
+        }
+
+        private CourseGradeItemResponse toResponse() {
+            Double averageScore = attemptsCount > 0 ? roundScoreValue(scoreSum / attemptsCount) : null;
+            return new CourseGradeItemResponse(
+                    participant.userId(),
+                    participant.name(),
+                    participant.username(),
+                    participant.email(),
+                    attemptsCount,
+                    averageScore,
+                    roundNullable(bestScore),
+                    roundNullable(lastScore),
+                    lastAttemptAt);
+        }
+    }
+
+    private CourseSessionItemResponse toCourseSessionItem(CourseSession session) {
+        String normalizedSessionName = session.getName() == null ? "" : session.getName().trim();
+        if (normalizedSessionName.isEmpty()) {
+            normalizedSessionName = "Sesion";
+        }
+        String normalizedWeeklyContent = trimOrNull(session.getWeeklyContent());
+        List<CourseSessionContentItemResponse> contents = courseSessionContentRepository
+                .findByCourseSessionIdAndDeletedAtIsNullOrderByCreatedAtAsc(session.getId())
+                .stream()
+                .map(this::toCourseSessionContentItem)
+                .toList();
+        return new CourseSessionItemResponse(
+                session.getId(),
+                normalizedSessionName,
+                normalizedWeeklyContent,
+                contents,
+                session.getCreatedAt());
+    }
+
+    private CourseSessionContentItemResponse toCourseSessionContentItem(CourseSessionContent content) {
+        Exam sourceExam = content.getSourceExam();
+        return new CourseSessionContentItemResponse(
+                content.getId(),
+                trimOrNull(content.getType()),
+                trimOrNull(content.getTitle()),
+                trimOrNull(content.getExternalLink()),
+                trimOrNull(content.getFileName()),
+                trimOrNull(content.getFileData()),
+                sourceExam == null ? null : sourceExam.getId(),
+                sourceExam == null ? null : trimOrNull(sourceExam.getName()),
+                content.getCreatedAt());
+    }
+
+    private CourseExamItemResponse toExamItem(Exam exam) {
+        String examName = exam.getName() == null ? "" : exam.getName().trim();
+        if (examName.isEmpty()) {
+            examName = "examen";
+        }
+        return new CourseExamItemResponse(exam.getId(), examName, exam.getQuestionsCount());
+    }
+
+    private String normalizeVideoLink(String rawValue) {
+        String value = trimOrNull(rawValue);
+        if (value == null) {
+            return null;
+        }
+        if (!value.startsWith("http://") && !value.startsWith("https://")) {
+            value = "https://" + value;
+        }
+        return value;
+    }
+
+    private String validateAndNormalizeImageData(String imageData) {
+        if (imageData == null) {
+            return null;
+        }
+        String lower = imageData.toLowerCase();
+        if (!lower.startsWith("data:image/")) {
+            throw new BadRequestException("La portada debe ser una imagen");
+        }
+        validateDocumentSize(imageData);
+        return imageData;
+    }
+
+    private String validatePdfFileData(String fileData, String fileName) {
+        String lower = fileData.toLowerCase();
+        String normalizedName = fileName.toLowerCase();
+        boolean validMime = lower.startsWith("data:application/pdf;base64,")
+                || lower.startsWith("data:application/octet-stream;base64,");
+        boolean validExtension = normalizedName.endsWith(".pdf");
+        if (!validMime && !validExtension) {
+            throw new BadRequestException("Solo se permite PDF para el campo pdf");
+        }
+        validateDocumentSize(fileData);
+        return fileData;
+    }
+
+    private String validateWordFileData(String fileData, String fileName) {
+        String lower = fileData.toLowerCase();
+        String normalizedName = fileName.toLowerCase();
+        boolean validMime = lower.startsWith("data:application/msword;base64,")
+                || lower.startsWith("data:application/vnd.ms-word;base64,")
+                || lower.startsWith(
+                        "data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,")
+                || lower.startsWith("data:application/octet-stream;base64,");
+        boolean validExtension = normalizedName.endsWith(".doc") || normalizedName.endsWith(".docx");
+        if (!validMime && !validExtension) {
+            throw new BadRequestException("Solo se permite Word para el campo word");
+        }
+        validateDocumentSize(fileData);
+        return fileData;
+    }
+
+    private void validateDocumentSize(String fileData) {
+        if (fileData.length() > 7_000_000) {
+            throw new BadRequestException("El archivo es demasiado grande");
+        }
+    }
+
+    private String normalizeContentType(String rawType) {
+        String type = trimOrNull(rawType);
+        if (type == null) {
+            throw new BadRequestException("type es obligatorio");
+        }
+        String normalized = type.toLowerCase(Locale.ROOT);
+        if (!normalized.equals("video")
+                && !normalized.equals("pdf")
+                && !normalized.equals("word")
+                && !normalized.equals("cover")
+                && !normalized.equals("exam")) {
+            throw new BadRequestException("type debe ser video, pdf, word, cover o exam");
+        }
+        return normalized;
+    }
+
+    private void applyContentData(
+            CourseSessionContent content,
+            String type,
+            String externalLink,
+            String fileName,
+            String fileData,
+            Long sourceExamId,
+            Long ownerUserId) {
+        String normalizedExternalLink = trimOrNull(externalLink);
+        String normalizedFileName = trimOrNull(fileName);
+        String normalizedFileData = trimOrNull(fileData);
+
+        if (type.equals("video")) {
+            String normalizedVideoLink = normalizeVideoLink(normalizedExternalLink);
+            if (normalizedVideoLink == null) {
+                throw new BadRequestException("externalLink es obligatorio para contenido tipo video");
+            }
+            content.setExternalLink(normalizedVideoLink);
+            content.setFileName(null);
+            content.setFileData(null);
+            content.setSourceExam(null);
+            return;
+        }
+
+        if (type.equals("pdf")) {
+            if (normalizedFileName == null || normalizedFileData == null) {
+                throw new BadRequestException("fileName y fileData son obligatorios para contenido tipo pdf");
+            }
+            content.setExternalLink(null);
+            content.setFileName(normalizedFileName);
+            content.setFileData(validatePdfFileData(normalizedFileData, normalizedFileName));
+            content.setSourceExam(null);
+            return;
+        }
+
+        if (type.equals("word")) {
+            if (normalizedFileName == null || normalizedFileData == null) {
+                throw new BadRequestException("fileName y fileData son obligatorios para contenido tipo word");
+            }
+            content.setExternalLink(null);
+            content.setFileName(normalizedFileName);
+            content.setFileData(validateWordFileData(normalizedFileData, normalizedFileName));
+            content.setSourceExam(null);
+            return;
+        }
+
+        if (type.equals("exam")) {
+            if (sourceExamId == null) {
+                throw new BadRequestException("sourceExamId es obligatorio para contenido tipo exam");
+            }
+            Exam sourceExam = examRepository
+                    .findByIdAndUserIdAndDeletedAtIsNull(sourceExamId, ownerUserId)
+                    .orElseThrow(() -> new BadRequestException("sourceExamId no pertenece al usuario"));
+            content.setExternalLink(null);
+            content.setFileName(null);
+            content.setFileData(null);
+            content.setSourceExam(sourceExam);
+            return;
+        }
+
+        if (normalizedFileData == null) {
+            throw new BadRequestException("fileData es obligatorio para contenido tipo cover");
+        }
+        content.setExternalLink(null);
+        content.setFileName(normalizedFileName);
+        content.setFileData(validateAndNormalizeImageData(normalizedFileData));
+        content.setSourceExam(null);
+    }
+}

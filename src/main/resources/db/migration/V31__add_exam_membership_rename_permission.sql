@@ -1,0 +1,2 @@
+ALTER TABLE exam_memberships
+ADD COLUMN IF NOT EXISTS can_rename_exam BOOLEAN NOT NULL DEFAULT FALSE;
