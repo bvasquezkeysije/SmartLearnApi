@@ -691,6 +691,35 @@ public class ExamService {
         examMembershipRepository.save(membership);
     }
 
+    @Transactional
+    public void removeExamParticipant(Long examId, Long participantUserId, Long requesterUserId) {
+        Exam exam = requireExamOwner(examId, requesterUserId);
+        Long ownerId = exam.getUser() == null ? null : exam.getUser().getId();
+        if (ownerId != null && ownerId.equals(participantUserId)) {
+            throw new BadRequestException("No puedes eliminar al propietario del examen.");
+        }
+
+        ExamMembership membership = examMembershipRepository
+                .findByExamIdAndUserIdAndDeletedAtIsNull(examId, participantUserId)
+                .orElseThrow(() -> new NotFoundException("Participante no encontrado en este examen."));
+
+        LocalDateTime now = LocalDateTime.now();
+        membership.setRole("viewer");
+        membership.setCanShare(Boolean.FALSE);
+        membership.setCanStartGroup(Boolean.FALSE);
+        membership.setCanRenameExam(Boolean.FALSE);
+        membership.setDeletedAt(now);
+        examMembershipRepository.save(membership);
+
+        ExamPracticePreference preference = examPracticePreferenceRepository
+                .findByExamIdAndUserIdAndDeletedAtIsNull(examId, participantUserId)
+                .orElse(null);
+        if (preference != null) {
+            preference.setDeletedAt(now);
+            examPracticePreferenceRepository.save(preference);
+        }
+    }
+
     @Transactional(readOnly = true)
     public Exam requireExamCanShare(Long examId, Long userId) {
         ExamAccess access = resolveExamAccess(examId, userId);

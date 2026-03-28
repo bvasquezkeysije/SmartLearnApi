@@ -198,6 +198,14 @@ public class ExamApiController {
         examService.updateExamParticipantPermissions(examId, participantUserId, request);
     }
 
+    @DeleteMapping("/{examId}/participants/{participantUserId}")
+    public void removeParticipant(
+            @PathVariable Long examId,
+            @PathVariable Long participantUserId,
+            @RequestParam Long requesterUserId) {
+        examService.removeExamParticipant(examId, participantUserId, requesterUserId);
+    }
+
     @PostMapping("/{examId}/manual/questions")
     public QuestionResponse addQuestion(@PathVariable Long examId, @Valid @RequestBody ManualQuestionUpsertRequest request) {
         return examService.addManualQuestion(examId, request);

@@ -89,6 +89,14 @@ public class AuthService {
         return buildLoginResponse(user);
     }
 
+    @Transactional(readOnly = true)
+    public LoginResponse getSession(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UnauthorizedException("Sesion no valida."));
+        ensureUserActive(user);
+        return buildLoginResponse(user);
+    }
+
     @Transactional
     public GoogleLoginResponse loginWithGoogle(GoogleLoginRequest request) {
         GoogleIdentity identity = verifyGoogleIdentity(request.idToken(), request.accessToken());
@@ -113,7 +121,11 @@ public class AuthService {
                     null,
                     "Sesion iniciada con Google.",
                     login.authProvider(),
-                    login.hasLocalPassword());
+                    login.hasLocalPassword(),
+                    login.profileImageData(),
+                    login.profileImageScale(),
+                    login.profileImageOffsetX(),
+                    login.profileImageOffsetY());
         }
 
         String suggestedUsername = generateAvailableUsername(identity.name(), identity.email());
@@ -129,7 +141,11 @@ public class AuthService {
                 suggestedUsername,
                 "Cuenta de Google detectada. Completa tu registro.",
                 "google",
-                false);
+                false,
+                null,
+                null,
+                null,
+                null);
     }
 
     @Transactional

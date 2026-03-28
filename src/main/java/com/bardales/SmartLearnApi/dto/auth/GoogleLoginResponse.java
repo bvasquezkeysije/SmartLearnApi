@@ -14,5 +14,9 @@ public record GoogleLoginResponse(
         String suggestedUsername,
         String message,
         String authProvider,
-        Boolean hasLocalPassword) {
+        Boolean hasLocalPassword,
+        String profileImageData,
+        Double profileImageScale,
+        Double profileImageOffsetX,
+        Double profileImageOffsetY) {
 }

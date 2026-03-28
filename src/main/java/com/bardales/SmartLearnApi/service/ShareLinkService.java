@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,6 +39,12 @@ public class ShareLinkService {
 
     private static final int DEFAULT_EXPIRES_HOURS = 24 * 7;
     private static final int MAX_EXPIRES_HOURS = 24 * 30;
+    private static final int DEFAULT_RECIPIENTS_LIMIT = 20;
+    private static final int MAX_RECIPIENTS_LIMIT = 50;
+    private static final int MIN_RECIPIENTS_QUERY_LENGTH = 2;
+    private static final String INVITATION_STATUS_PENDING = "pending";
+    private static final String INVITATION_STATUS_ACCEPTED = "accepted";
+    private static final String INVITATION_STATUS_REJECTED = "rejected";
 
     private final ShareLinkRepository shareLinkRepository;
     private final UserRepository userRepository;
@@ -112,9 +119,21 @@ public class ShareLinkService {
     }
 
     private ShareLink createShareLink(User owner, String resourceType, Long resourceId, Integer expiresInHours) {
+        String normalizedResourceType = normalizeResourceType(resourceType);
+        ShareLink existing = shareLinkRepository
+                .findTopByOwnerUserIdAndResourceTypeIgnoreCaseAndResourceIdAndActiveIsTrueAndDeletedAtIsNullOrderByCreatedAtDesc(
+                        owner.getId(),
+                        normalizedResourceType,
+                        resourceId)
+                .orElse(null);
+
+        if (existing != null && isShareLinkCurrentlyUsable(existing)) {
+            return existing;
+        }
+
         ShareLink shareLink = new ShareLink();
         shareLink.setOwnerUser(owner);
-        shareLink.setResourceType(resourceType);
+        shareLink.setResourceType(normalizedResourceType);
         shareLink.setResourceId(resourceId);
         shareLink.setToken(generateShareToken());
         shareLink.setExpiresAt(LocalDateTime.now().plusHours(resolveExpiresInHours(expiresInHours)));
@@ -139,10 +158,24 @@ public class ShareLinkService {
 
         if (!isOwner && membership == null) {
             String visibility = normalizeExamVisibility(exam.getVisibility());
-            if (!visibility.equals("public")) {
-                throw new BadRequestException("Este examen es privado. Solicita acceso al propietario.");
+            if (visibility.equals("public")) {
+                examService.upsertExamMembership(exam, user, "viewer", Boolean.FALSE);
+            } else {
+                ShareNotification acceptedInvitation = shareNotificationRepository
+                        .findTopByShareLinkIdAndRecipientUserIdAndInvitationStatusIgnoreCaseAndDeletedAtIsNullOrderByCreatedAtDesc(
+                                shareLink.getId(),
+                                user.getId(),
+                                INVITATION_STATUS_ACCEPTED)
+                        .orElse(null);
+                if (acceptedInvitation == null) {
+                    throw new BadRequestException("Debes aceptar la invitacion desde tu bandeja para acceder a este examen.");
+                }
+                examService.upsertExamMembership(
+                        exam,
+                        user,
+                        normalizeExamRole(acceptedInvitation.getExamRole()),
+                        Boolean.TRUE.equals(acceptedInvitation.getExamCanShare()));
             }
-            examService.upsertExamMembership(exam, user, "viewer", Boolean.FALSE);
         }
 
         String examName = trimOrNull(exam.getName());
@@ -206,10 +239,22 @@ public class ShareLinkService {
     }
 
     @Transactional(readOnly = true)
-    public List<ShareNotificationRecipientResponse> listRecipients(Long userId) {
+    public List<ShareNotificationRecipientResponse> listRecipients(Long userId, String query, Integer limit) {
         User requester = requireUser(userId);
-        return userRepository.findByStatusOrderByNameAsc(1).stream()
-                .filter(user -> user.getId() != null && !user.getId().equals(requester.getId()))
+        String normalizedQuery = trimOrNull(query);
+        if (normalizedQuery == null || normalizedQuery.length() < MIN_RECIPIENTS_QUERY_LENGTH) {
+            return List.of();
+        }
+
+        int safeLimit = resolveRecipientsLimit(limit);
+        return userRepository
+                .searchActiveRecipients(
+                        1,
+                        requester.getId(),
+                        normalizedQuery,
+                        PageRequest.of(0, safeLimit))
+                .stream()
+                .filter(user -> user.getId() != null)
                 .map(user -> new ShareNotificationRecipientResponse(
                         user.getId(),
                         trimOrNull(user.getName()) == null ? "Usuario" : trimOrNull(user.getName()),
@@ -228,9 +273,12 @@ public class ShareLinkService {
             throw new BadRequestException("resourceId es obligatorio");
         }
 
-        Exam examToShare = null;
+        String invitationExamRole = null;
+        Boolean invitationExamCanShare = null;
         if (resourceType.equals("exam")) {
-            examToShare = examService.requireExamCanShare(resourceId, owner.getId());
+            examService.requireExamCanShare(resourceId, owner.getId());
+            invitationExamRole = normalizeExamRole(request.examRole());
+            invitationExamCanShare = Boolean.TRUE.equals(request.examCanShare());
         } else {
             validateOwnerCanShareResource(owner, resourceType, resourceId);
         }
@@ -249,15 +297,11 @@ public class ShareLinkService {
             throw new BadRequestException("Uno o mas usuarios destino no son validos");
         }
 
-        if (resourceType.equals("exam") && examToShare != null) {
-            String examRole = normalizeExamRole(request.examRole());
-            boolean examCanShare = Boolean.TRUE.equals(request.examCanShare());
-            for (User recipient : recipients) {
-                examService.upsertExamMembership(examToShare, recipient, examRole, examCanShare);
-            }
-        }
-
         ShareLink shareLink = createShareLink(owner, resourceType, resourceId, request.expiresInHours());
+        String invitationStatus =
+                resourceType.equals("exam") ? INVITATION_STATUS_PENDING : INVITATION_STATUS_ACCEPTED;
+        String resolvedExamRole = invitationExamRole;
+        Boolean resolvedExamCanShare = invitationExamCanShare;
 
         List<ShareNotification> notifications = recipients.stream()
                 .map(recipient -> {
@@ -269,6 +313,15 @@ public class ShareLinkService {
                     notification.setResourceId(resourceId);
                     notification.setResourceName(resourceName);
                     notification.setMessage(buildNotificationMessage(owner, resourceType, resourceName));
+                    notification.setInvitationStatus(invitationStatus);
+                    notification.setInvitationRespondedAt(null);
+                    if (resourceType.equals("exam")) {
+                        notification.setExamRole(resolvedExamRole);
+                        notification.setExamCanShare(resolvedExamCanShare);
+                    } else {
+                        notification.setExamRole(null);
+                        notification.setExamCanShare(null);
+                    }
                     notification.setReadAt(null);
                     notification.setDeletedAt(null);
                     return notification;
@@ -297,14 +350,70 @@ public class ShareLinkService {
     @Transactional
     public ShareNotificationResponse markNotificationAsRead(Long notificationId, Long userId) {
         requireUser(userId);
-        ShareNotification notification = shareNotificationRepository
-                .findByIdAndRecipientUserIdAndDeletedAtIsNull(notificationId, userId)
-                .orElseThrow(() -> new NotFoundException("Notificacion no encontrada"));
+        ShareNotification notification = requireNotificationForRecipient(notificationId, userId);
         if (notification.getReadAt() == null) {
             notification.setReadAt(LocalDateTime.now());
             notification = shareNotificationRepository.save(notification);
         }
         return toNotificationResponse(notification);
+    }
+
+    @Transactional
+    public ShareNotificationResponse acceptNotificationInvitation(Long notificationId, Long userId) {
+        User recipient = requireUser(userId);
+        ShareNotification notification = requireNotificationForRecipient(notificationId, userId);
+        String invitationStatus = normalizeInvitationStatus(notification.getInvitationStatus());
+        if (invitationStatus.equals(INVITATION_STATUS_REJECTED)) {
+            throw new BadRequestException("Esta invitacion ya fue rechazada.");
+        }
+
+        if (normalizeResourceType(notification.getResourceType()).equals("exam")) {
+            Exam exam = examRepository.findById(notification.getResourceId())
+                    .orElseThrow(() -> new NotFoundException("Examen no encontrado"));
+            if (exam.getDeletedAt() != null) {
+                throw new NotFoundException("Examen no encontrado");
+            }
+            examService.upsertExamMembership(
+                    exam,
+                    recipient,
+                    normalizeExamRole(notification.getExamRole()),
+                    Boolean.TRUE.equals(notification.getExamCanShare()));
+        }
+
+        if (!invitationStatus.equals(INVITATION_STATUS_ACCEPTED)) {
+            notification.setInvitationStatus(INVITATION_STATUS_ACCEPTED);
+            notification.setInvitationRespondedAt(LocalDateTime.now());
+        }
+        if (notification.getReadAt() == null) {
+            notification.setReadAt(LocalDateTime.now());
+        }
+        notification = shareNotificationRepository.save(notification);
+        return toNotificationResponse(notification);
+    }
+
+    @Transactional
+    public ShareNotificationResponse rejectNotificationInvitation(Long notificationId, Long userId) {
+        requireUser(userId);
+        ShareNotification notification = requireNotificationForRecipient(notificationId, userId);
+        String invitationStatus = normalizeInvitationStatus(notification.getInvitationStatus());
+        if (invitationStatus.equals(INVITATION_STATUS_ACCEPTED)) {
+            throw new BadRequestException("Esta invitacion ya fue aceptada y no se puede rechazar.");
+        }
+        if (!invitationStatus.equals(INVITATION_STATUS_REJECTED)) {
+            notification.setInvitationStatus(INVITATION_STATUS_REJECTED);
+            notification.setInvitationRespondedAt(LocalDateTime.now());
+        }
+        if (notification.getReadAt() == null) {
+            notification.setReadAt(LocalDateTime.now());
+        }
+        notification = shareNotificationRepository.save(notification);
+        return toNotificationResponse(notification);
+    }
+
+    private ShareNotification requireNotificationForRecipient(Long notificationId, Long userId) {
+        return shareNotificationRepository
+                .findByIdAndRecipientUserIdAndDeletedAtIsNull(notificationId, userId)
+                .orElseThrow(() -> new NotFoundException("Notificacion no encontrada"));
     }
 
     private void validateShareLinkIsUsable(ShareLink shareLink) {
@@ -324,6 +433,21 @@ public class ShareLinkService {
         }
     }
 
+    private boolean isShareLinkCurrentlyUsable(ShareLink shareLink) {
+        if (!Boolean.TRUE.equals(shareLink.getActive())) {
+            return false;
+        }
+
+        LocalDateTime expiresAt = shareLink.getExpiresAt();
+        if (expiresAt != null && LocalDateTime.now().isAfter(expiresAt)) {
+            return false;
+        }
+
+        Integer maxClaims = shareLink.getMaxClaims();
+        Integer claimsCount = shareLink.getClaimsCount();
+        return maxClaims == null || maxClaims <= 0 || claimsCount == null || claimsCount < maxClaims;
+    }
+
     private User requireUser(Long userId) {
         return userRepository.findById(userId).orElseThrow(() -> new NotFoundException("Usuario no encontrado"));
     }
@@ -339,6 +463,20 @@ public class ShareLinkService {
         return resolved;
     }
 
+    private int resolveRecipientsLimit(Integer value) {
+        if (value == null) {
+            return DEFAULT_RECIPIENTS_LIMIT;
+        }
+        int resolved = value.intValue();
+        if (resolved <= 0) {
+            return DEFAULT_RECIPIENTS_LIMIT;
+        }
+        if (resolved > MAX_RECIPIENTS_LIMIT) {
+            return MAX_RECIPIENTS_LIMIT;
+        }
+        return resolved;
+    }
+
     private String generateShareToken() {
         return UUID.randomUUID().toString().replace("-", "");
     }
@@ -349,6 +487,20 @@ public class ShareLinkService {
             return "";
         }
         return normalized.toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeInvitationStatus(String value) {
+        String normalized = trimOrNull(value);
+        if (normalized == null) {
+            return INVITATION_STATUS_ACCEPTED;
+        }
+        normalized = normalized.toLowerCase(Locale.ROOT);
+        if (normalized.equals(INVITATION_STATUS_PENDING)
+                || normalized.equals(INVITATION_STATUS_ACCEPTED)
+                || normalized.equals(INVITATION_STATUS_REJECTED)) {
+            return normalized;
+        }
+        return INVITATION_STATUS_ACCEPTED;
     }
 
     private String normalizeToken(String value) {
@@ -495,6 +647,8 @@ public class ShareLinkService {
                 resourceName,
                 trimOrNull(notification.getMessage()),
                 shareLink == null ? null : trimOrNull(shareLink.getToken()),
+                normalizeInvitationStatus(notification.getInvitationStatus()),
+                notification.getInvitationRespondedAt(),
                 notification.getReadAt(),
                 notification.getCreatedAt());
     }

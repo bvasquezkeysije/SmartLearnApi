@@ -48,8 +48,11 @@ public class ShareLinkController {
     }
 
     @GetMapping("/recipients")
-    public List<ShareNotificationRecipientResponse> listRecipients(@RequestParam Long userId) {
-        return shareLinkService.listRecipients(userId);
+    public List<ShareNotificationRecipientResponse> listRecipients(
+            @RequestParam Long userId,
+            @RequestParam(required = false) String query,
+            @RequestParam(required = false) Integer limit) {
+        return shareLinkService.listRecipients(userId, query, limit);
     }
 
     @PostMapping("/distribute")
@@ -67,5 +70,19 @@ public class ShareLinkController {
             @PathVariable Long notificationId,
             @RequestParam Long userId) {
         return shareLinkService.markNotificationAsRead(notificationId, userId);
+    }
+
+    @PatchMapping("/notifications/{notificationId}/accept")
+    public ShareNotificationResponse acceptNotificationInvitation(
+            @PathVariable Long notificationId,
+            @RequestParam Long userId) {
+        return shareLinkService.acceptNotificationInvitation(notificationId, userId);
+    }
+
+    @PatchMapping("/notifications/{notificationId}/reject")
+    public ShareNotificationResponse rejectNotificationInvitation(
+            @PathVariable Long notificationId,
+            @RequestParam Long userId) {
+        return shareLinkService.rejectNotificationInvitation(notificationId, userId);
     }
 }

@@ -37,6 +37,18 @@ public class ShareNotification extends BaseEntity {
     @Column(name = "message")
     private String message;
 
+    @Column(name = "invitation_status", nullable = false)
+    private String invitationStatus = "accepted";
+
+    @Column(name = "invitation_responded_at")
+    private LocalDateTime invitationRespondedAt;
+
+    @Column(name = "exam_role")
+    private String examRole;
+
+    @Column(name = "exam_can_share")
+    private Boolean examCanShare;
+
     @Column(name = "read_at")
     private LocalDateTime readAt;
 
@@ -99,6 +111,38 @@ public class ShareNotification extends BaseEntity {
         this.message = message;
     }
 
+    public String getInvitationStatus() {
+        return invitationStatus;
+    }
+
+    public void setInvitationStatus(String invitationStatus) {
+        this.invitationStatus = invitationStatus;
+    }
+
+    public LocalDateTime getInvitationRespondedAt() {
+        return invitationRespondedAt;
+    }
+
+    public void setInvitationRespondedAt(LocalDateTime invitationRespondedAt) {
+        this.invitationRespondedAt = invitationRespondedAt;
+    }
+
+    public String getExamRole() {
+        return examRole;
+    }
+
+    public void setExamRole(String examRole) {
+        this.examRole = examRole;
+    }
+
+    public Boolean getExamCanShare() {
+        return examCanShare;
+    }
+
+    public void setExamCanShare(Boolean examCanShare) {
+        this.examCanShare = examCanShare;
+    }
+
     public LocalDateTime getReadAt() {
         return readAt;
     }
@@ -115,4 +159,3 @@ public class ShareNotification extends BaseEntity {
         this.deletedAt = deletedAt;
     }
 }
-

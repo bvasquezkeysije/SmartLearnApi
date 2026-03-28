@@ -12,6 +12,7 @@ public record ShareNotificationResponse(
         String resourceName,
         String message,
         String token,
+        String invitationStatus,
+        LocalDateTime invitationRespondedAt,
         LocalDateTime readAt,
         LocalDateTime createdAt) {}
-
