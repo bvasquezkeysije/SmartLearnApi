@@ -20,6 +20,7 @@ public record ExamSummaryResponse(
         Boolean canEditQuestions,
         Boolean canEditSettings,
         Boolean canShare,
+        Boolean canStartGroup,
         Boolean canRenameExam,
         Long participantsCount,
         Long groupPracticeSessionId,

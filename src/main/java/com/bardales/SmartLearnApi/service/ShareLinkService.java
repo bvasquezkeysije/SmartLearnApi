@@ -4,6 +4,8 @@ import com.bardales.SmartLearnApi.domain.entity.Course;
 import com.bardales.SmartLearnApi.domain.entity.CourseMembership;
 import com.bardales.SmartLearnApi.domain.entity.Exam;
 import com.bardales.SmartLearnApi.domain.entity.ExamMembership;
+import com.bardales.SmartLearnApi.domain.entity.Sala;
+import com.bardales.SmartLearnApi.domain.entity.ScheduleProfile;
 import com.bardales.SmartLearnApi.domain.entity.ShareLink;
 import com.bardales.SmartLearnApi.domain.entity.ShareNotification;
 import com.bardales.SmartLearnApi.domain.entity.User;
@@ -54,6 +56,8 @@ public class ShareLinkService {
     private final CourseMembershipRepository courseMembershipRepository;
     private final ShareNotificationRepository shareNotificationRepository;
     private final ExamService examService;
+    private final ScheduleService scheduleService;
+    private final SalaService salaService;
 
     public ShareLinkService(
             ShareLinkRepository shareLinkRepository,
@@ -63,7 +67,9 @@ public class ShareLinkService {
             CourseRepository courseRepository,
             CourseMembershipRepository courseMembershipRepository,
             ShareNotificationRepository shareNotificationRepository,
-            ExamService examService) {
+            ExamService examService,
+            ScheduleService scheduleService,
+            SalaService salaService) {
         this.shareLinkRepository = shareLinkRepository;
         this.userRepository = userRepository;
         this.examRepository = examRepository;
@@ -72,6 +78,8 @@ public class ShareLinkService {
         this.courseMembershipRepository = courseMembershipRepository;
         this.shareNotificationRepository = shareNotificationRepository;
         this.examService = examService;
+        this.scheduleService = scheduleService;
+        this.salaService = salaService;
     }
 
     @Transactional
@@ -92,6 +100,22 @@ public class ShareLinkService {
     }
 
     @Transactional
+    public ShareLinkResponse createScheduleShareLink(Long scheduleId, ShareLinkCreateRequest request) {
+        User owner = requireUser(request.userId());
+        scheduleService.requireScheduleCanShare(scheduleId, owner.getId());
+        ShareLink shareLink = createShareLink(owner, "schedule", scheduleId, request.expiresInHours());
+        return toResponse(shareLink);
+    }
+
+    @Transactional
+    public ShareLinkResponse createSalaShareLink(Long salaId, ShareLinkCreateRequest request) {
+        User owner = requireUser(request.userId());
+        salaService.requireSalaCanShare(salaId, owner.getId());
+        ShareLink shareLink = createShareLink(owner, "sala", salaId, request.expiresInHours());
+        return toResponse(shareLink);
+    }
+
+    @Transactional
     public ShareLinkClaimResponse claimShareLink(ShareLinkClaimRequest request) {
         User user = requireUser(request.userId());
         String token = normalizeToken(request.token());
@@ -107,8 +131,10 @@ public class ShareLinkService {
             response = claimExamLink(shareLink, user);
         } else if (type.equals("course")) {
             response = claimCourseLink(shareLink, user);
+        } else if (type.equals("schedule")) {
+            response = claimScheduleLink(shareLink, user);
         } else if (type.equals("sala")) {
-            response = claimSalaLink(shareLink);
+            response = claimSalaLink(shareLink, user);
         } else {
             throw new BadRequestException("Tipo de recurso de comparticion invalido");
         }
@@ -226,16 +252,46 @@ public class ShareLinkService {
                 "Curso compartido agregado a tu modulo de cursos.");
     }
 
-    private ShareLinkClaimResponse claimSalaLink(ShareLink shareLink) {
-        Long salaId = shareLink.getResourceId();
-        if (salaId == null || salaId <= 0) {
-            throw new BadRequestException("Sala compartida invalida");
+    private ShareLinkClaimResponse claimSalaLink(ShareLink shareLink, User user) {
+        Sala sala = salaService.requireSala(shareLink.getResourceId());
+
+        Long ownerUserId = sala.getOwnerUser() == null ? null : sala.getOwnerUser().getId();
+        boolean isOwner = ownerUserId != null && ownerUserId.equals(user.getId());
+        if (!isOwner) {
+            salaService.upsertSalaMembership(sala, user, "viewer", false);
         }
+
+        String salaName = trimOrNull(sala.getName());
+        if (salaName == null) {
+            salaName = "Sala";
+        }
+
         return new ShareLinkClaimResponse(
                 "sala",
-                salaId,
-                "Sala",
+                sala.getId(),
+                salaName,
                 "Sala compartida lista en tu modulo de salas.");
+    }
+
+    private ShareLinkClaimResponse claimScheduleLink(ShareLink shareLink, User user) {
+        ScheduleProfile scheduleProfile = scheduleService.requireScheduleProfile(shareLink.getResourceId());
+
+        Long ownerUserId = scheduleProfile.getOwnerUser() == null ? null : scheduleProfile.getOwnerUser().getId();
+        boolean isOwner = ownerUserId != null && ownerUserId.equals(user.getId());
+        if (!isOwner) {
+            scheduleService.upsertScheduleMembership(scheduleProfile, user, "viewer", false);
+        }
+
+        String scheduleName = trimOrNull(scheduleProfile.getName());
+        if (scheduleName == null) {
+            scheduleName = "horario";
+        }
+
+        return new ShareLinkClaimResponse(
+                "schedule",
+                scheduleProfile.getId(),
+                scheduleName,
+                "Horario compartido agregado a tu modulo de horarios.");
     }
 
     @Transactional(readOnly = true)
@@ -513,10 +569,13 @@ public class ShareLinkService {
 
     private String normalizeDistributionResourceType(String value) {
         String normalized = normalizeResourceType(value);
-        if (normalized.equals("exam") || normalized.equals("course") || normalized.equals("sala")) {
+        if (normalized.equals("exam")
+                || normalized.equals("course")
+                || normalized.equals("sala")
+                || normalized.equals("schedule")) {
             return normalized;
         }
-        throw new BadRequestException("resourceType debe ser exam, course o sala");
+        throw new BadRequestException("resourceType debe ser exam, course, sala o schedule");
     }
 
     private String normalizeExamRole(String value) {
@@ -554,9 +613,11 @@ public class ShareLinkService {
             return;
         }
         if (resourceType.equals("sala")) {
-            if (resourceId <= 0) {
-                throw new BadRequestException("Sala invalida para compartir");
-            }
+            salaService.requireSalaCanShare(resourceId, owner.getId());
+            return;
+        }
+        if (resourceType.equals("schedule")) {
+            scheduleService.requireScheduleCanShare(resourceId, owner.getId());
             return;
         }
         throw new BadRequestException("Tipo de recurso de comparticion invalido");
@@ -587,7 +648,31 @@ public class ShareLinkService {
             }
             return "Curso";
         }
-        return "Sala";
+        if (resourceType.equals("schedule")) {
+            try {
+                ScheduleProfile scheduleProfile = scheduleService.requireScheduleProfile(resourceId);
+                String scheduleName = trimOrNull(scheduleProfile.getName());
+                if (scheduleName != null) {
+                    return scheduleName;
+                }
+            } catch (RuntimeException ignored) {
+                // Si no existe o no esta disponible, usar etiqueta por defecto.
+            }
+            return "Horario";
+        }
+        if (resourceType.equals("sala")) {
+            try {
+                Sala sala = salaService.requireSala(resourceId);
+                String salaName = trimOrNull(sala.getName());
+                if (salaName != null) {
+                    return salaName;
+                }
+            } catch (RuntimeException ignored) {
+                // Si no existe o no esta disponible, usar etiqueta por defecto.
+            }
+            return "Sala";
+        }
+        return "Recurso";
     }
 
     private Set<Long> normalizeRecipientIds(List<Long> recipientUserIds, Long senderUserId) {
@@ -613,8 +698,11 @@ public class ShareLinkService {
             ownerName = "Un usuario";
         }
 
-        String resourceLabel =
-                resourceType.equals("exam") ? "examen" : resourceType.equals("course") ? "curso" : "sala";
+        String resourceLabel = resourceType.equals("exam")
+                ? "examen"
+                : resourceType.equals("course")
+                        ? "curso"
+                        : resourceType.equals("schedule") ? "horario" : "sala";
         return ownerName + " te compartio " + resourceLabel + ": " + resourceName;
     }
 
@@ -634,7 +722,9 @@ public class ShareLinkService {
         String resourceType = normalizeResourceType(notification.getResourceType());
         String resourceName = trimOrNull(notification.getResourceName());
         if (resourceName == null) {
-            resourceName = resourceType.equals("exam") ? "Examen" : resourceType.equals("course") ? "Curso" : "Sala";
+            resourceName = resourceType.equals("exam")
+                    ? "Examen"
+                    : resourceType.equals("course") ? "Curso" : resourceType.equals("schedule") ? "Horario" : "Sala";
         }
 
         return new ShareNotificationResponse(

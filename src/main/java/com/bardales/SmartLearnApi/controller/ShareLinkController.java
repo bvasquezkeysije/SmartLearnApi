@@ -42,6 +42,18 @@ public class ShareLinkController {
         return shareLinkService.createCourseShareLink(courseId, request);
     }
 
+    @PostMapping("/schedules/{scheduleId}")
+    public ShareLinkResponse createScheduleShareLink(
+            @PathVariable Long scheduleId, @Valid @RequestBody ShareLinkCreateRequest request) {
+        return shareLinkService.createScheduleShareLink(scheduleId, request);
+    }
+
+    @PostMapping("/salas/{salaId}")
+    public ShareLinkResponse createSalaShareLink(
+            @PathVariable Long salaId, @Valid @RequestBody ShareLinkCreateRequest request) {
+        return shareLinkService.createSalaShareLink(salaId, request);
+    }
+
     @PostMapping("/claim")
     public ShareLinkClaimResponse claimShareLink(@Valid @RequestBody ShareLinkClaimRequest request) {
         return shareLinkService.claimShareLink(request);

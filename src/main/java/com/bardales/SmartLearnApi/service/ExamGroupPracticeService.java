@@ -196,19 +196,6 @@ public class ExamGroupPracticeService {
         ensureSessionMember(session, access.user());
         session = refreshSessionPresence(session);
 
-        // Si el cliente consulta una sesion finalizada, redirigirlo a la sesion
-        // activa/en espera mas reciente para mantener a todos sincronizados.
-        if ("finished".equals(normalizeStatus(session.getStatus()))) {
-            ExamGroupSession latestActiveOrWaiting = examGroupSessionRepository
-                    .findTopByExamIdAndDeletedAtIsNullAndStatusInOrderByCreatedAtDesc(examId, List.of("waiting", "active"))
-                    .orElse(null);
-            if (latestActiveOrWaiting != null && !latestActiveOrWaiting.getId().equals(session.getId())) {
-                ensureSessionMember(latestActiveOrWaiting, access.user());
-                latestActiveOrWaiting = refreshSessionPresence(latestActiveOrWaiting);
-                return toGroupState(latestActiveOrWaiting, userId, access.canStartGroup());
-            }
-        }
-
         return toGroupState(session, userId, access.canStartGroup());
     }
 
@@ -283,21 +270,6 @@ public class ExamGroupPracticeService {
 
         Question currentQuestion = resolveCurrentQuestion(session)
                 .orElseThrow(() -> new BadRequestException("No hay pregunta activa en esta sesion grupal."));
-        List<ExamGroupSessionAnswer> currentAnswers =
-            examGroupSessionAnswerRepository.findForQuestion(session.getId(), currentQuestion.getId());
-
-        List<ExamGroupSessionMember> members =
-                examGroupSessionMemberRepository.findBySessionIdAndDeletedAtIsNullOrderByCreatedAtAsc(session.getId());
-        long connectedCount = members.stream().filter(member -> Boolean.TRUE.equals(member.getConnected())).count();
-        long answeredCount = members.stream()
-                .filter(member -> Boolean.TRUE.equals(member.getConnected()))
-                .filter(member -> currentAnswers.stream().anyMatch(answer -> answer.getUser() != null
-                        && answer.getUser().getId() != null
-                        && answer.getUser().getId().equals(member.getUser() == null ? null : member.getUser().getId())))
-                .count();
-        if (connectedCount > 0 && answeredCount < connectedCount) {
-            throw new BadRequestException("Aun faltan respuestas de participantes conectados.");
-        }
 
         int currentIndex = session.getCurrentQuestionIndex() == null ? 0 : session.getCurrentQuestionIndex();
         int totalQuestions = session.getTotalQuestions() == null ? 0 : session.getTotalQuestions();

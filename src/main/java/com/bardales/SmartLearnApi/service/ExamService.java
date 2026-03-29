@@ -1087,7 +1087,7 @@ public class ExamService {
                 .orElseThrow(() -> new NotFoundException("Examen no encontrado"));
         Long ownerUserId = exam.getUser() == null ? null : exam.getUser().getId();
         if (ownerUserId != null && ownerUserId.equals(userId)) {
-            return new ExamAccess(exam, true, "owner", true, true, true);
+            return new ExamAccess(exam, true, "owner", true, true, true, true);
         }
 
         ExamMembership membership = examMembershipRepository
@@ -1095,15 +1095,16 @@ public class ExamService {
                 .orElse(null);
         if (membership == null) {
             if ("public".equals(normalizeExamVisibility(exam.getVisibility()))) {
-                return new ExamAccess(exam, false, "viewer", false, false, false);
+                return new ExamAccess(exam, false, "viewer", false, false, false, false);
             }
             throw new NotFoundException("Examen no encontrado");
         }
         String role = normalizeExamRole(membership.getRole());
         boolean canEdit = "editor".equals(role);
         boolean canShare = Boolean.TRUE.equals(membership.getCanShare());
+        boolean canStartGroup = Boolean.TRUE.equals(membership.getCanStartGroup());
         boolean canRenameExam = Boolean.TRUE.equals(membership.getCanRenameExam());
-        return new ExamAccess(exam, false, role, canEdit, canShare, canRenameExam);
+        return new ExamAccess(exam, false, role, canEdit, canShare, canStartGroup, canRenameExam);
     }
 
     private String normalizeExamRole(String value) {
@@ -1250,6 +1251,7 @@ public class ExamService {
                 access.canEdit(),
                 access.canEdit(),
                 access.canShare(),
+                access.canStartGroup(),
                 access.canRenameExam(),
                 participantsCount,
                 groupSessionId,
@@ -1305,7 +1307,14 @@ public class ExamService {
             String correctOption) {
     }
 
-    private record ExamAccess(Exam exam, boolean owner, String role, boolean canEdit, boolean canShare, boolean canRenameExam) {
+    private record ExamAccess(
+            Exam exam,
+            boolean owner,
+            String role,
+            boolean canEdit,
+            boolean canShare,
+            boolean canStartGroup,
+            boolean canRenameExam) {
     }
 
     private record PracticeSettings(boolean feedbackEnabled, String orderMode, boolean repeatUntilCorrect) {
