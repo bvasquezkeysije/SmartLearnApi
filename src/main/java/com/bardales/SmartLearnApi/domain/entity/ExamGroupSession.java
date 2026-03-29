@@ -39,6 +39,9 @@ public class ExamGroupSession extends BaseEntity {
     @Column(name = "started_at")
     private LocalDateTime startedAt;
 
+    @Column(name = "current_question_started_at")
+    private LocalDateTime currentQuestionStartedAt;
+
     @Column(name = "finished_at")
     private LocalDateTime finishedAt;
 
@@ -107,6 +110,14 @@ public class ExamGroupSession extends BaseEntity {
 
     public void setStartedAt(LocalDateTime startedAt) {
         this.startedAt = startedAt;
+    }
+
+    public LocalDateTime getCurrentQuestionStartedAt() {
+        return currentQuestionStartedAt;
+    }
+
+    public void setCurrentQuestionStartedAt(LocalDateTime currentQuestionStartedAt) {
+        this.currentQuestionStartedAt = currentQuestionStartedAt;
     }
 
     public LocalDateTime getFinishedAt() {

@@ -19,5 +19,6 @@ public record ExamGroupStateResponse(
         String firstResponderName,
         Integer firstAnswerElapsedSeconds,
         LocalDateTime questionStartedAt,
+        Long questionStartedAtEpochMs,
         LocalDateTime startedAt,
         LocalDateTime finishedAt) {}

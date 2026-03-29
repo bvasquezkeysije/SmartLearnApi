@@ -30,6 +30,7 @@ import com.bardales.SmartLearnApi.exception.NotFoundException;
 import java.text.Normalizer;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -177,12 +178,14 @@ public class ExamGroupPracticeService {
             Collections.shuffle(questionIds);
         }
 
+        LocalDateTime now = LocalDateTime.now();
         session.setStatus("active");
         session.setOrderMode(orderMode);
         session.setQuestionIds(serializeQuestionIds(questionIds));
         session.setTotalQuestions(questionIds.size());
         session.setCurrentQuestionIndex(0);
-        session.setStartedAt(LocalDateTime.now());
+        session.setStartedAt(now);
+        session.setCurrentQuestionStartedAt(now);
         session.setFinishedAt(null);
         session = examGroupSessionRepository.save(session);
 
@@ -276,8 +279,10 @@ public class ExamGroupPracticeService {
         if (currentIndex + 1 >= totalQuestions) {
             session.setStatus("finished");
             session.setFinishedAt(LocalDateTime.now());
+            session.setCurrentQuestionStartedAt(null);
         } else {
             session.setCurrentQuestionIndex(currentIndex + 1);
+            session.setCurrentQuestionStartedAt(LocalDateTime.now());
         }
 
         session = examGroupSessionRepository.save(session);
@@ -299,6 +304,7 @@ public class ExamGroupPracticeService {
         if (session.getStartedAt() == null) {
             session.setStartedAt(now);
         }
+        session.setCurrentQuestionStartedAt(null);
         session.setFinishedAt(now);
         session = examGroupSessionRepository.save(session);
 
@@ -338,6 +344,7 @@ public class ExamGroupPracticeService {
         if (!"finished".equals(normalizeStatus(session.getStatus()))) {
             session.setStatus("finished");
         }
+        session.setCurrentQuestionStartedAt(null);
         if (session.getFinishedAt() == null) {
             session.setFinishedAt(now);
         }
@@ -355,6 +362,7 @@ public class ExamGroupPracticeService {
         newSession.setTotalQuestions(0);
         newSession.setCurrentQuestionIndex(0);
         newSession.setStartedAt(null);
+        newSession.setCurrentQuestionStartedAt(null);
         newSession.setFinishedAt(null);
         newSession = examGroupSessionRepository.save(newSession);
 
@@ -489,6 +497,7 @@ public class ExamGroupPracticeService {
             if ("active".equals(status) && session.getStartedAt() == null) {
                 session.setStartedAt(now);
             }
+            session.setCurrentQuestionStartedAt(null);
             session.setFinishedAt(now);
             return examGroupSessionRepository.save(session);
         }
@@ -616,9 +625,15 @@ public class ExamGroupPracticeService {
         }
 
         LocalDateTime questionStartedAt = null;
+        Long questionStartedAtEpochMs = null;
         Integer firstAnswerElapsedSeconds = null;
         if ("active".equals(status) && currentQuestion != null) {
-            questionStartedAt = session.getUpdatedAt() != null ? session.getUpdatedAt() : session.getStartedAt();
+            questionStartedAt = session.getCurrentQuestionStartedAt() != null
+                    ? session.getCurrentQuestionStartedAt()
+                    : session.getStartedAt();
+            if (questionStartedAt != null) {
+                questionStartedAtEpochMs = questionStartedAt.atZone(ZoneOffset.UTC).toInstant().toEpochMilli();
+            }
             if (questionStartedAt != null && firstAnsweredAt != null) {
                 long seconds = Duration.between(questionStartedAt, firstAnsweredAt).getSeconds();
                 if (seconds >= 0 && seconds <= Integer.MAX_VALUE) {
@@ -647,6 +662,7 @@ public class ExamGroupPracticeService {
                 firstResponderName,
                 firstAnswerElapsedSeconds,
                 questionStartedAt,
+                questionStartedAtEpochMs,
                 session.getStartedAt(),
                 session.getFinishedAt());
     }
