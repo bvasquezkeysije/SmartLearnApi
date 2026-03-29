@@ -250,8 +250,9 @@ public class ExamGroupPracticeService {
             throw new BadRequestException("La sesion grupal no esta activa.");
         }
 
-        Question currentQuestion = resolveCurrentQuestion(session)
-                .orElseThrow(() -> new BadRequestException("No hay pregunta activa en esta sesion grupal."));
+        if (resolveCurrentQuestion(session).isEmpty()) {
+            throw new BadRequestException("No hay pregunta activa en esta sesion grupal.");
+        }
         if (!currentQuestion.getId().equals(request.questionId())) {
             throw new BadRequestException("La pregunta enviada no coincide con la pregunta actual del grupo.");
         }
