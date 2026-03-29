@@ -45,7 +45,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ExamGroupPracticeService {
-    private static final long MEMBER_PRESENCE_TIMEOUT_SECONDS = 20;
+    // Mas tolerante para clientes moviles/redes inestables antes de marcarlos desconectados.
+    private static final long MEMBER_PRESENCE_TIMEOUT_SECONDS = 60;
 
     private final ExamRepository examRepository;
     private final UserRepository userRepository;
@@ -197,6 +198,22 @@ public class ExamGroupPracticeService {
         GroupAccess access = resolveGroupAccess(examId, userId);
         ExamGroupSession session = requireSession(examId, sessionId);
         ensureSessionMember(session, access.user());
+
+        // Si el cliente sigue consultando una sesion ya finalizada, pero existe una mas
+        // reciente en espera/activa, redirigirlo automaticamente a la nueva sala.
+        if ("finished".equals(normalizeStatus(session.getStatus()))) {
+            ExamGroupSession latestSession = examGroupSessionRepository
+                    .findTopByExamIdAndDeletedAtIsNullAndStatusInOrderByCreatedAtDesc(examId, List.of("waiting", "active"))
+                    .orElse(null);
+            if (latestSession != null
+                    && latestSession.getId() != null
+                    && !latestSession.getId().equals(session.getId())) {
+                ensureSessionMember(latestSession, access.user());
+                latestSession = refreshSessionPresence(latestSession);
+                return toGroupState(latestSession, userId, access.canStartGroup());
+            }
+        }
+
         session = refreshSessionPresence(session);
 
         return toGroupState(session, userId, access.canStartGroup());
