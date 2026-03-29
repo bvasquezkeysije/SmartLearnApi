@@ -45,8 +45,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ExamGroupPracticeService {
-    // Mas tolerante para clientes moviles/redes inestables antes de marcarlos desconectados.
-    private static final long MEMBER_PRESENCE_TIMEOUT_SECONDS = 60;
+    // Equilibrio entre evitar "usuarios fantasma" y tolerar jitter de red.
+    private static final long MEMBER_PRESENCE_TIMEOUT_SECONDS = 30;
 
     private final ExamRepository examRepository;
     private final UserRepository userRepository;
@@ -199,15 +199,16 @@ public class ExamGroupPracticeService {
         ExamGroupSession session = requireSession(examId, sessionId);
         ensureSessionMember(session, access.user());
 
-        // Si el cliente sigue consultando una sesion ya finalizada, pero existe una mas
-        // reciente en espera/activa, redirigirlo automaticamente a la nueva sala.
+        // Si el cliente consulta una sesion finalizada, solo redirigir a una sala
+        // mas nueva creada DESPUES de que esta sesion termino (reinicio explicito).
         if ("finished".equals(normalizeStatus(session.getStatus()))) {
             ExamGroupSession latestSession = examGroupSessionRepository
                     .findTopByExamIdAndDeletedAtIsNullAndStatusInOrderByCreatedAtDesc(examId, List.of("waiting", "active"))
                     .orElse(null);
             if (latestSession != null
                     && latestSession.getId() != null
-                    && !latestSession.getId().equals(session.getId())) {
+                    && !latestSession.getId().equals(session.getId())
+                    && isNewerSessionSinceFinished(session, latestSession)) {
                 ensureSessionMember(latestSession, access.user());
                 latestSession = refreshSessionPresence(latestSession);
                 return toGroupState(latestSession, userId, access.canStartGroup());
@@ -217,6 +218,25 @@ public class ExamGroupPracticeService {
         session = refreshSessionPresence(session);
 
         return toGroupState(session, userId, access.canStartGroup());
+    }
+
+    private boolean isNewerSessionSinceFinished(ExamGroupSession finishedSession, ExamGroupSession candidateSession) {
+        if (finishedSession == null || candidateSession == null) {
+            return false;
+        }
+
+        LocalDateTime candidateCreatedAt = candidateSession.getCreatedAt();
+        if (candidateCreatedAt == null) {
+            return false;
+        }
+
+        LocalDateTime finishedAt = finishedSession.getFinishedAt();
+        if (finishedAt == null) {
+            return true;
+        }
+
+        // Incluye igualdad para tolerar precision de timestamp a nivel de BD.
+        return !candidateCreatedAt.isBefore(finishedAt);
     }
 
     @Transactional
