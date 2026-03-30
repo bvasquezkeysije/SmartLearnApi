@@ -355,7 +355,9 @@ public class ShareLinkService {
 
         ShareLink shareLink = createShareLink(owner, resourceType, resourceId, request.expiresInHours());
         String invitationStatus =
-                resourceType.equals("exam") ? INVITATION_STATUS_PENDING : INVITATION_STATUS_ACCEPTED;
+                (resourceType.equals("exam") || resourceType.equals("schedule"))
+                        ? INVITATION_STATUS_PENDING
+                        : INVITATION_STATUS_ACCEPTED;
         String resolvedExamRole = invitationExamRole;
         Boolean resolvedExamCanShare = invitationExamCanShare;
 
@@ -423,7 +425,8 @@ public class ShareLinkService {
             throw new BadRequestException("Esta invitacion ya fue rechazada.");
         }
 
-        if (normalizeResourceType(notification.getResourceType()).equals("exam")) {
+        String resourceType = normalizeResourceType(notification.getResourceType());
+        if (resourceType.equals("exam")) {
             Exam exam = examRepository.findById(notification.getResourceId())
                     .orElseThrow(() -> new NotFoundException("Examen no encontrado"));
             if (exam.getDeletedAt() != null) {
@@ -434,6 +437,9 @@ public class ShareLinkService {
                     recipient,
                     normalizeExamRole(notification.getExamRole()),
                     Boolean.TRUE.equals(notification.getExamCanShare()));
+        } else if (resourceType.equals("schedule")) {
+            ScheduleProfile scheduleProfile = scheduleService.requireScheduleProfile(notification.getResourceId());
+            scheduleService.upsertScheduleMembership(scheduleProfile, recipient, "viewer", false);
         }
 
         if (!invitationStatus.equals(INVITATION_STATUS_ACCEPTED)) {
