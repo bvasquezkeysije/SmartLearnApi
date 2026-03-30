@@ -8,8 +8,9 @@ public record SupportConversationCreateRequest(
         @NotBlank(message = "subject es obligatorio") String subject,
         String priority,
         String channelPreference,
+        String ticketType,
+        String moduleKey,
         String whatsappNumber,
         String callNumber,
         @NotBlank(message = "initialMessage es obligatorio") String initialMessage) {
 }
-

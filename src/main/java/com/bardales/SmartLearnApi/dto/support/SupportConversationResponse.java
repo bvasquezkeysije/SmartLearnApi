@@ -13,9 +13,10 @@ public record SupportConversationResponse(
         String status,
         String priority,
         String channelPreference,
+        String ticketType,
+        String moduleKey,
         String whatsappNumber,
         String callNumber,
         LocalDateTime lastMessageAt,
         LocalDateTime createdAt) {
 }
-

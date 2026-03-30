@@ -89,6 +89,8 @@ public class SupportService {
         conversation.setStatus("open");
         conversation.setPriority(normalizePriority(request.priority()));
         conversation.setChannelPreference(normalizeChannelPreference(request.channelPreference()));
+        conversation.setTicketType(normalizeTicketType(request.ticketType()));
+        conversation.setModuleKey(normalizeModuleKey(request.moduleKey()));
         conversation.setWhatsappNumber(trimOrNull(request.whatsappNumber()));
         conversation.setCallNumber(trimOrNull(request.callNumber()));
         conversation.setLastMessageAt(LocalDateTime.now());
@@ -266,6 +268,33 @@ public class SupportService {
         throw new BadRequestException("channelPreference debe ser chat, whatsapp o call");
     }
 
+    private String normalizeTicketType(String rawValue) {
+        String value = trimOrNull(rawValue);
+        if (value == null) {
+            return "support";
+        }
+        String normalized = value.toLowerCase(Locale.ROOT);
+        if (normalized.equals("support") || normalized.equals("bug") || normalized.equals("question")) {
+            return normalized;
+        }
+        throw new BadRequestException("ticketType debe ser support, bug o question");
+    }
+
+    private String normalizeModuleKey(String rawValue) {
+        String value = trimOrNull(rawValue);
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.toLowerCase(Locale.ROOT);
+        if (normalized.length() > 60) {
+            throw new BadRequestException("moduleKey no puede exceder 60 caracteres");
+        }
+        if (!normalized.matches("[a-z0-9_\\-]+")) {
+            throw new BadRequestException("moduleKey solo permite letras, numeros, guion y guion bajo");
+        }
+        return normalized;
+    }
+
     private String trimOrNull(String value) {
         if (value == null) {
             return null;
@@ -298,6 +327,8 @@ public class SupportService {
                 trimOrNull(conversation.getStatus()),
                 trimOrNull(conversation.getPriority()),
                 trimOrNull(conversation.getChannelPreference()),
+                trimOrNull(conversation.getTicketType()),
+                trimOrNull(conversation.getModuleKey()),
                 trimOrNull(conversation.getWhatsappNumber()),
                 trimOrNull(conversation.getCallNumber()),
                 conversation.getLastMessageAt(),
@@ -345,4 +376,3 @@ public class SupportService {
                 request.getCreatedAt());
     }
 }
-

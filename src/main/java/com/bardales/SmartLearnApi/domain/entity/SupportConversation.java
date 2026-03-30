@@ -33,6 +33,12 @@ public class SupportConversation extends BaseEntity {
     @Column(name = "channel_preference", nullable = false)
     private String channelPreference;
 
+    @Column(name = "ticket_type", nullable = false)
+    private String ticketType;
+
+    @Column(name = "module_key")
+    private String moduleKey;
+
     @Column(name = "whatsapp_number")
     private String whatsappNumber;
 
@@ -93,6 +99,22 @@ public class SupportConversation extends BaseEntity {
         this.channelPreference = channelPreference;
     }
 
+    public String getTicketType() {
+        return ticketType;
+    }
+
+    public void setTicketType(String ticketType) {
+        this.ticketType = ticketType;
+    }
+
+    public String getModuleKey() {
+        return moduleKey;
+    }
+
+    public void setModuleKey(String moduleKey) {
+        this.moduleKey = moduleKey;
+    }
+
     public String getWhatsappNumber() {
         return whatsappNumber;
     }
@@ -125,4 +147,3 @@ public class SupportConversation extends BaseEntity {
         this.deletedAt = deletedAt;
     }
 }
-
