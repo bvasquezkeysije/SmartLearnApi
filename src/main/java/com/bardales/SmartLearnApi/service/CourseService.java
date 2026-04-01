@@ -468,6 +468,9 @@ public class CourseService {
 
         course.setName(name);
         course.setDescription(trimOrNull(request.description()));
+        if (request.coverImageData() != null) {
+            course.setCoverImageData(trimOrNull(request.coverImageData()));
+        }
         String visibility = request.visibility() == null
                 ? normalizeCourseVisibility(course.getVisibility(), false)
                 : normalizeCourseVisibility(request.visibility(), true);

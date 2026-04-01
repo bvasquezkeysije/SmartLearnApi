@@ -7,6 +7,7 @@ public record CourseUpdateRequest(
         @NotNull(message = "userId es obligatorio") Long userId,
         @NotBlank(message = "name es obligatorio") String name,
         String description,
+        String coverImageData,
         String code,
         String visibility,
         String priority,
