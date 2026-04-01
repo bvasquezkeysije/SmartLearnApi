@@ -9,6 +9,8 @@ import com.bardales.SmartLearnApi.dto.exam.ExamPracticeSettingsResponse;
 import com.bardales.SmartLearnApi.dto.exam.ExamGroupAdvanceRequest;
 import com.bardales.SmartLearnApi.dto.exam.ExamGroupAnswerRequest;
 import com.bardales.SmartLearnApi.dto.exam.ExamGroupJoinRequest;
+import com.bardales.SmartLearnApi.dto.exam.ExamListVisibilityRequest;
+import com.bardales.SmartLearnApi.dto.exam.ExamListVisibilityResponse;
 import com.bardales.SmartLearnApi.dto.exam.ExamGroupStartRequest;
 import com.bardales.SmartLearnApi.dto.exam.ExamGroupStateResponse;
 import com.bardales.SmartLearnApi.dto.exam.ExamParticipantPermissionUpdateRequest;
@@ -100,6 +102,20 @@ public class ExamApiController {
             @PathVariable Long examId,
             @Valid @RequestBody ExamPracticeSettingsRequest request) {
         return examService.updatePracticeSettings(examId, request);
+    }
+
+    @PatchMapping("/{examId}/list-visibility")
+    public void updateExamListVisibility(
+            @PathVariable Long examId,
+            @Valid @RequestBody ExamListVisibilityRequest request) {
+        examService.setExamListVisibility(examId, request.userId(), request.visible());
+    }
+
+    @GetMapping("/{examId}/list-visibility")
+    public ExamListVisibilityResponse getExamListVisibility(
+            @PathVariable Long examId,
+            @RequestParam Long userId) {
+        return examService.getExamListVisibility(examId, userId);
     }
 
     @GetMapping("/{examId}/practice/settings/individual")

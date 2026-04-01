@@ -20,6 +20,7 @@ import com.bardales.SmartLearnApi.dto.exam.ExamParticipantPermissionUpdateReques
 import com.bardales.SmartLearnApi.dto.exam.ExamParticipantResponse;
 import com.bardales.SmartLearnApi.dto.exam.ExamRenameRequest;
 import com.bardales.SmartLearnApi.dto.exam.ExamIndividualPracticeSettingsRequest;
+import com.bardales.SmartLearnApi.dto.exam.ExamListVisibilityResponse;
 import com.bardales.SmartLearnApi.dto.exam.ExamPracticeStartResponse;
 import com.bardales.SmartLearnApi.dto.exam.ExamPracticeSettingsResponse;
 import com.bardales.SmartLearnApi.dto.exam.ExamPracticeSettingsRequest;
@@ -118,6 +119,9 @@ public class ExamService {
         }
 
         for (ExamMembership membership : examMembershipRepository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(requester.getId())) {
+            if (!Boolean.TRUE.equals(membership.getVisibleInExamList())) {
+                continue;
+            }
             Exam exam = membership.getExam();
             if (exam == null || exam.getDeletedAt() != null || exam.getId() == null) {
                 continue;
@@ -731,11 +735,22 @@ public class ExamService {
 
     @Transactional
     public void upsertExamMembership(Exam exam, User participant, String role, Boolean canShare) {
-        upsertExamMembership(exam, participant, role, canShare, Boolean.FALSE);
+        upsertExamMembership(exam, participant, role, canShare, Boolean.FALSE, Boolean.TRUE);
     }
 
     @Transactional
     public void upsertExamMembership(Exam exam, User participant, String role, Boolean canShare, Boolean canStartGroup) {
+        upsertExamMembership(exam, participant, role, canShare, canStartGroup, Boolean.TRUE);
+    }
+
+    @Transactional
+    public void upsertExamMembership(
+            Exam exam,
+            User participant,
+            String role,
+            Boolean canShare,
+            Boolean canStartGroup,
+            Boolean visibleInExamList) {
         if (exam == null || exam.getId() == null || participant == null || participant.getId() == null) {
             throw new BadRequestException("No se pudo registrar el participante del examen.");
         }
@@ -757,8 +772,38 @@ public class ExamService {
         membership.setRole(normalizeExamRole(role));
         membership.setCanShare(Boolean.TRUE.equals(canShare));
         membership.setCanStartGroup(Boolean.TRUE.equals(canStartGroup));
+        membership.setVisibleInExamList(Boolean.TRUE.equals(visibleInExamList));
         membership.setDeletedAt(null);
         examMembershipRepository.save(membership);
+    }
+
+    @Transactional
+    public void setExamListVisibility(Long examId, Long userId, Boolean visible) {
+        Exam exam = requireExamCanPractice(examId, userId);
+        Long ownerId = exam.getUser() == null ? null : exam.getUser().getId();
+        if (ownerId != null && ownerId.equals(userId)) {
+            return;
+        }
+
+        ExamMembership membership = examMembershipRepository
+                .findByExamIdAndUserIdAndDeletedAtIsNull(examId, userId)
+                .orElseThrow(() -> new NotFoundException("No perteneces a este examen."));
+        membership.setVisibleInExamList(Boolean.TRUE.equals(visible));
+        examMembershipRepository.save(membership);
+    }
+
+    @Transactional(readOnly = true)
+    public ExamListVisibilityResponse getExamListVisibility(Long examId, Long userId) {
+        Exam exam = requireExamCanPractice(examId, userId);
+        Long ownerId = exam.getUser() == null ? null : exam.getUser().getId();
+        if (ownerId != null && ownerId.equals(userId)) {
+            return new ExamListVisibilityResponse(examId, userId, true);
+        }
+        ExamMembership membership = examMembershipRepository
+                .findByExamIdAndUserIdAndDeletedAtIsNull(examId, userId)
+                .orElse(null);
+        boolean visible = membership != null && Boolean.TRUE.equals(membership.getVisibleInExamList());
+        return new ExamListVisibilityResponse(examId, userId, visible);
     }
 
     private void refreshQuestionsCount(Exam exam) {

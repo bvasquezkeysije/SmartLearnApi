@@ -33,6 +33,9 @@ public class ExamMembership extends BaseEntity {
     @Column(name = "can_rename_exam", nullable = false)
     private Boolean canRenameExam = Boolean.FALSE;
 
+    @Column(name = "visible_in_exam_list", nullable = false)
+    private Boolean visibleInExamList = Boolean.TRUE;
+
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
@@ -82,6 +85,14 @@ public class ExamMembership extends BaseEntity {
 
     public void setCanRenameExam(Boolean canRenameExam) {
         this.canRenameExam = canRenameExam;
+    }
+
+    public Boolean getVisibleInExamList() {
+        return visibleInExamList;
+    }
+
+    public void setVisibleInExamList(Boolean visibleInExamList) {
+        this.visibleInExamList = visibleInExamList;
     }
 
     public LocalDateTime getDeletedAt() {

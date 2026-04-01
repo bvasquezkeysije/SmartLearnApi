@@ -413,13 +413,24 @@ public class CourseService {
             throw new BadRequestException("Este contenido no tiene un examen asociado");
         }
 
-        String cloneSourcePath = "course-content://" + content.getId() + "/source/" + sourceExam.getId();
-        Exam userExam = examService.ensureExamAvailableForUser(sourceExam.getId(), userId, cloneSourcePath);
-        String examName = trimOrNull(userExam.getName());
+        Long ownerUserId = course.getUser() == null ? null : course.getUser().getId();
+        boolean isOwner = ownerUserId != null && ownerUserId.equals(userId);
+        if (!isOwner) {
+            User participant = requireUser(userId);
+            examService.upsertExamMembership(
+                    sourceExam,
+                    participant,
+                    "viewer",
+                    Boolean.FALSE,
+                    Boolean.FALSE,
+                    Boolean.FALSE);
+        }
+
+        String examName = trimOrNull(sourceExam.getName());
         if (examName == null) {
             examName = "examen";
         }
-        return new CourseSessionContentPracticeStartResponse(userExam.getId(), examName);
+        return new CourseSessionContentPracticeStartResponse(sourceExam.getId(), examName);
     }
 
     @Transactional
