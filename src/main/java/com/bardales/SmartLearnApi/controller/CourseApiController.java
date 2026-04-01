@@ -53,6 +53,22 @@ public class CourseApiController {
         return courseService.joinPublicCourse(courseId, request.userId());
     }
 
+    @PatchMapping("/{courseId}/join-requests/{requesterUserId}/accept")
+    public CourseJoinResponse acceptJoinRequest(
+            @PathVariable Long courseId,
+            @PathVariable Long requesterUserId,
+            @RequestParam Long userId) {
+        return courseService.acceptCourseJoinRequest(courseId, requesterUserId, userId);
+    }
+
+    @PatchMapping("/{courseId}/join-requests/{requesterUserId}/reject")
+    public CourseJoinResponse rejectJoinRequest(
+            @PathVariable Long courseId,
+            @PathVariable Long requesterUserId,
+            @RequestParam Long userId) {
+        return courseService.rejectCourseJoinRequest(courseId, requesterUserId, userId);
+    }
+
     @PostMapping("/{courseId}/participants")
     public CourseResponse addParticipant(@PathVariable Long courseId, @Valid @RequestBody CourseParticipantSaveRequest request) {
         return courseService.addCourseParticipant(courseId, request);

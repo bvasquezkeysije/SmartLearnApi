@@ -27,6 +27,8 @@ import com.bardales.SmartLearnApi.dto.share.ShareLinkResponse;
 import com.bardales.SmartLearnApi.exception.BadRequestException;
 import com.bardales.SmartLearnApi.exception.NotFoundException;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -399,10 +401,67 @@ public class ShareLinkService {
 
     @Transactional(readOnly = true)
     public List<ShareNotificationResponse> listNotifications(Long userId) {
-        requireUser(userId);
-        return shareNotificationRepository.findByRecipientUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId).stream()
+        User recipient = requireUser(userId);
+
+        List<ShareNotificationResponse> notifications = new ArrayList<>(shareNotificationRepository
+                .findByRecipientUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId).stream()
                 .map(this::toNotificationResponse)
+                .toList());
+
+        List<CourseMembership> pendingCourseRequests = courseMembershipRepository
+                .findByCourseUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId)
+                .stream()
+                .filter(membership -> "pending".equals(normalizeCourseMembershipRole(membership.getRole())))
                 .toList();
+
+        for (CourseMembership pendingRequest : pendingCourseRequests) {
+            Course course = pendingRequest.getCourse();
+            User requester = pendingRequest.getUser();
+            if (course == null || course.getDeletedAt() != null || requester == null) {
+                continue;
+            }
+            Long courseId = course.getId();
+            if (courseId == null || course.getUser() == null || !userId.equals(course.getUser().getId())) {
+                continue;
+            }
+            Long requesterId = requester.getId();
+            if (requesterId == null || requesterId.equals(recipient.getId())) {
+                continue;
+            }
+
+            long syntheticId = pendingRequest.getId() == null
+                    ? -((courseId * 1_000_000L) + requesterId)
+                    : -pendingRequest.getId();
+            String requesterName = trimOrNull(requester.getName());
+            if (requesterName == null) {
+                requesterName = trimOrNull(requester.getUsername());
+            }
+            if (requesterName == null) {
+                requesterName = "Usuario";
+            }
+            String courseName = trimOrNull(course.getName());
+            if (courseName == null) {
+                courseName = "Curso";
+            }
+            notifications.add(new ShareNotificationResponse(
+                    syntheticId,
+                    requesterId,
+                    requesterName,
+                    trimOrNull(requester.getUsername()) == null ? "" : trimOrNull(requester.getUsername()),
+                    "course_join_request",
+                    courseId,
+                    courseName,
+                    requesterName + " solicito unirse a tu curso " + courseName + ".",
+                    null,
+                    INVITATION_STATUS_PENDING,
+                    null,
+                    null,
+                    pendingRequest.getCreatedAt()));
+        }
+
+        notifications.sort(Comparator.comparing(ShareNotificationResponse::createdAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                .reversed());
+        return notifications;
     }
 
     @Transactional
@@ -563,6 +622,21 @@ public class ShareLinkService {
             return normalized;
         }
         return INVITATION_STATUS_ACCEPTED;
+    }
+
+    private String normalizeCourseMembershipRole(String value) {
+        String normalized = trimOrNull(value);
+        if (normalized == null) {
+            return "viewer";
+        }
+        normalized = normalized.toLowerCase(Locale.ROOT);
+        if (normalized.equals("editor")
+                || normalized.equals("assistant")
+                || normalized.equals("viewer")
+                || normalized.equals("pending")) {
+            return normalized;
+        }
+        return "viewer";
     }
 
     private String normalizeToken(String value) {

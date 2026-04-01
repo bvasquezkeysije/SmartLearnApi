@@ -511,6 +511,41 @@ public class CourseService {
     }
 
     @Transactional
+    public CourseJoinResponse acceptCourseJoinRequest(Long courseId, Long requesterUserId, Long ownerUserId) {
+        Course course = requireCourseOwned(courseId, ownerUserId);
+        CourseMembership membership = courseMembershipRepository
+                .findByCourseIdAndUserIdAndDeletedAtIsNull(course.getId(), requesterUserId)
+                .orElseThrow(() -> new NotFoundException("Solicitud de ingreso no encontrada"));
+
+        String currentRole = normalizeCourseMembershipRole(membership.getRole(), false);
+        if (!"pending".equals(currentRole)) {
+            return new CourseJoinResponse(course.getId(), "already_processed", "La solicitud ya fue procesada.");
+        }
+
+        membership.setRole("viewer");
+        membership.setDeletedAt(null);
+        courseMembershipRepository.save(membership);
+        return new CourseJoinResponse(course.getId(), "accepted", "Solicitud aceptada.");
+    }
+
+    @Transactional
+    public CourseJoinResponse rejectCourseJoinRequest(Long courseId, Long requesterUserId, Long ownerUserId) {
+        Course course = requireCourseOwned(courseId, ownerUserId);
+        CourseMembership membership = courseMembershipRepository
+                .findByCourseIdAndUserIdAndDeletedAtIsNull(course.getId(), requesterUserId)
+                .orElseThrow(() -> new NotFoundException("Solicitud de ingreso no encontrada"));
+
+        String currentRole = normalizeCourseMembershipRole(membership.getRole(), false);
+        if (!"pending".equals(currentRole)) {
+            return new CourseJoinResponse(course.getId(), "already_processed", "La solicitud ya fue procesada.");
+        }
+
+        membership.setDeletedAt(LocalDateTime.now());
+        courseMembershipRepository.save(membership);
+        return new CourseJoinResponse(course.getId(), "rejected", "Solicitud rechazada.");
+    }
+
+    @Transactional
     public CourseResponse updateCourse(Long courseId, CourseUpdateRequest request) {
         Course course = requireCourseOwned(courseId, request.userId());
         String name = trimOrNull(request.name());
