@@ -10,6 +10,7 @@ public record CourseCreateRequest(
         String coverImageData,
         String code,
         String visibility,
+        String joinMode,
         String priority,
         Integer sortOrder) {
 }

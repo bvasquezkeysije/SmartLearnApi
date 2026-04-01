@@ -2,6 +2,8 @@ package com.bardales.SmartLearnApi.controller;
 
 import com.bardales.SmartLearnApi.dto.course.CourseCreateRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseCompetencySaveRequest;
+import com.bardales.SmartLearnApi.dto.course.CourseJoinRequest;
+import com.bardales.SmartLearnApi.dto.course.CourseJoinResponse;
 import com.bardales.SmartLearnApi.dto.course.CourseModuleResponse;
 import com.bardales.SmartLearnApi.dto.course.CourseParticipantRoleUpdateRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseParticipantSaveRequest;
@@ -44,6 +46,11 @@ public class CourseApiController {
     @PostMapping
     public CourseResponse create(@Valid @RequestBody CourseCreateRequest request) {
         return courseService.createCourse(request);
+    }
+
+    @PostMapping("/{courseId}/join")
+    public CourseJoinResponse joinPublicCourse(@PathVariable Long courseId, @Valid @RequestBody CourseJoinRequest request) {
+        return courseService.joinPublicCourse(courseId, request.userId());
     }
 
     @PostMapping("/{courseId}/participants")

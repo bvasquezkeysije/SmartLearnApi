@@ -23,6 +23,7 @@ import com.bardales.SmartLearnApi.dto.course.CourseCompetencySaveRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseCreateRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseExamItemResponse;
 import com.bardales.SmartLearnApi.dto.course.CourseGradeItemResponse;
+import com.bardales.SmartLearnApi.dto.course.CourseJoinResponse;
 import com.bardales.SmartLearnApi.dto.course.CourseModuleResponse;
 import com.bardales.SmartLearnApi.dto.course.CourseParticipantItemResponse;
 import com.bardales.SmartLearnApi.dto.course.CourseParticipantRoleUpdateRequest;
@@ -147,6 +148,7 @@ public class CourseService {
         course.setCoverImageData(trimOrNull(request.coverImageData()));
         course.setCode(resolveCourseCode(request.code(), name, null));
         course.setVisibility(normalizeCourseVisibility(request.visibility(), true));
+        course.setJoinMode(normalizeCourseJoinMode(request.joinMode(), true));
         course.setPriority(normalizeCoursePriority(request.priority(), true));
         course.setSortOrder(normalizeCourseSortOrder(request.sortOrder(), true));
         course = courseRepository.save(course);
@@ -458,6 +460,57 @@ public class CourseService {
     }
 
     @Transactional
+    public CourseJoinResponse joinPublicCourse(Long courseId, Long userId) {
+        User user = requireUser(userId);
+        Course course = courseRepository.findByIdAndDeletedAtIsNull(courseId)
+                .orElseThrow(() -> new NotFoundException("Curso no encontrado"));
+
+        User owner = course.getUser();
+        Long ownerUserId = owner == null ? null : owner.getId();
+        if (ownerUserId != null && ownerUserId.equals(userId)) {
+            return new CourseJoinResponse(course.getId(), "already_member", "Ya perteneces a este curso.");
+        }
+
+        if (!"public".equals(normalizeCourseVisibility(course.getVisibility(), false))) {
+            throw new BadRequestException("Este curso no permite unirse directamente");
+        }
+
+        CourseMembership activeMembership = courseMembershipRepository
+                .findByCourseIdAndUserIdAndDeletedAtIsNull(courseId, userId)
+                .orElse(null);
+        if (activeMembership != null) {
+            String existingRole = normalizeCourseMembershipRole(activeMembership.getRole(), false);
+            if ("pending".equals(existingRole)) {
+                return new CourseJoinResponse(
+                        course.getId(),
+                        "already_requested",
+                        "Tu solicitud ya fue enviada. Espera la aprobacion del creador.");
+            }
+            return new CourseJoinResponse(course.getId(), "already_member", "Ya perteneces a este curso.");
+        }
+
+        String joinMode = normalizeCourseJoinMode(course.getJoinMode(), false);
+        boolean requiresApproval = "request".equals(joinMode);
+
+        CourseMembership membership = courseMembershipRepository
+                .findByCourseIdAndUserId(courseId, userId)
+                .orElseGet(CourseMembership::new);
+        membership.setCourse(course);
+        membership.setUser(user);
+        membership.setDeletedAt(null);
+        membership.setRole(requiresApproval ? "pending" : "viewer");
+        courseMembershipRepository.save(membership);
+
+        if (requiresApproval) {
+            return new CourseJoinResponse(
+                    course.getId(),
+                    "requested",
+                    "Solicitud enviada. El creador debe aprobar tu ingreso.");
+        }
+        return new CourseJoinResponse(course.getId(), "joined", "Te uniste al curso correctamente.");
+    }
+
+    @Transactional
     public CourseResponse updateCourse(Long courseId, CourseUpdateRequest request) {
         Course course = requireCourseOwned(courseId, request.userId());
         String name = trimOrNull(request.name());
@@ -475,6 +528,10 @@ public class CourseService {
                 ? normalizeCourseVisibility(course.getVisibility(), false)
                 : normalizeCourseVisibility(request.visibility(), true);
         course.setVisibility(visibility);
+        String joinMode = request.joinMode() == null
+                ? normalizeCourseJoinMode(course.getJoinMode(), false)
+                : normalizeCourseJoinMode(request.joinMode(), true);
+        course.setJoinMode(joinMode);
         String priority = request.priority() == null
                 ? normalizeCoursePriority(course.getPriority(), false)
                 : normalizeCoursePriority(request.priority(), true);
@@ -530,12 +587,10 @@ public class CourseService {
         if (owner != null && owner.getId() != null && owner.getId().equals(userId)) {
             return true;
         }
-        if ("public".equals(normalizeCourseVisibility(course.getVisibility(), false))) {
-            return true;
-        }
         return courseMembershipRepository
                 .findByCourseIdAndUserIdAndDeletedAtIsNull(course.getId(), userId)
-                .isPresent();
+                .map(membership -> !"pending".equals(normalizeCourseMembershipRole(membership.getRole(), false)))
+                .orElse(false);
     }
 
     private List<Long> normalizeExamIds(List<Long> examIds) {
@@ -609,6 +664,21 @@ public class CourseService {
         return "important";
     }
 
+    private String normalizeCourseJoinMode(String rawJoinMode, boolean strict) {
+        String value = trimOrNull(rawJoinMode);
+        if (value == null) {
+            return "open";
+        }
+        String normalized = value.toLowerCase(Locale.ROOT);
+        if (normalized.equals("open") || normalized.equals("request")) {
+            return normalized;
+        }
+        if (strict) {
+            throw new BadRequestException("joinMode debe ser open o request");
+        }
+        return "open";
+    }
+
     private Integer normalizeCourseSortOrder(Integer rawSortOrder, boolean strict) {
         if (rawSortOrder == null) {
             return 0;
@@ -628,11 +698,14 @@ public class CourseService {
             return "viewer";
         }
         String normalized = value.toLowerCase(Locale.ROOT);
-        if (normalized.equals("viewer") || normalized.equals("editor") || normalized.equals("assistant")) {
+        if (normalized.equals("viewer")
+                || normalized.equals("editor")
+                || normalized.equals("assistant")
+                || normalized.equals("pending")) {
             return normalized;
         }
         if (strict) {
-            throw new BadRequestException("role debe ser viewer, editor o assistant");
+            throw new BadRequestException("role debe ser viewer, editor, assistant o pending");
         }
         return "viewer";
     }
@@ -726,6 +799,7 @@ public class CourseService {
             normalizedCode = courseId == null ? "CURSO-SIN-CODIGO" : "CURSO-" + courseId;
         }
         String normalizedVisibility = normalizeCourseVisibility(course.getVisibility(), false);
+        String normalizedJoinMode = normalizeCourseJoinMode(course.getJoinMode(), false);
         String normalizedPriority = normalizeCoursePriority(course.getPriority(), false);
         Integer normalizedSortOrder = normalizeCourseSortOrder(course.getSortOrder(), false);
         Long ownerUserId = course.getUser() == null ? null : course.getUser().getId();
@@ -737,6 +811,7 @@ public class CourseService {
                 normalizedCoverImageData,
                 normalizedCode,
                 normalizedVisibility,
+                normalizedJoinMode,
                 normalizedPriority,
                 normalizedSortOrder,
                 ownerUserId,

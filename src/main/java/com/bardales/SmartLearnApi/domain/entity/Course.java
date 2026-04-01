@@ -32,6 +32,9 @@ public class Course extends BaseEntity {
     @Column(name = "visibility", nullable = false, length = 16)
     private String visibility;
 
+    @Column(name = "join_mode", nullable = false, length = 16)
+    private String joinMode = "open";
+
     @Column(name = "priority", nullable = false, length = 24)
     private String priority;
 
@@ -87,6 +90,14 @@ public class Course extends BaseEntity {
 
     public void setVisibility(String visibility) {
         this.visibility = visibility;
+    }
+
+    public String getJoinMode() {
+        return joinMode;
+    }
+
+    public void setJoinMode(String joinMode) {
+        this.joinMode = joinMode;
     }
 
     public String getPriority() {
