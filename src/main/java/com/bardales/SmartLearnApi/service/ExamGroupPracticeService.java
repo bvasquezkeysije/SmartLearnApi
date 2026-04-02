@@ -30,7 +30,7 @@ import com.bardales.SmartLearnApi.exception.NotFoundException;
 import java.text.Normalizer;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -672,7 +672,7 @@ public class ExamGroupPracticeService {
                     ? session.getCurrentQuestionStartedAt()
                     : session.getStartedAt();
             if (questionStartedAt != null) {
-                questionStartedAtEpochMs = questionStartedAt.atZone(ZoneOffset.UTC).toInstant().toEpochMilli();
+                questionStartedAtEpochMs = questionStartedAt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
             }
             if (questionStartedAt != null && firstAnsweredAt != null) {
                 long seconds = Duration.between(questionStartedAt, firstAnsweredAt).getSeconds();
