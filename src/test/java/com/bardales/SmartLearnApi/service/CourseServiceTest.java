@@ -22,6 +22,7 @@ import com.bardales.SmartLearnApi.domain.repository.CourseMembershipRepository;
 import com.bardales.SmartLearnApi.domain.repository.CourseRepository;
 import com.bardales.SmartLearnApi.domain.repository.CourseSessionContentRepository;
 import com.bardales.SmartLearnApi.domain.repository.CourseSessionRepository;
+import com.bardales.SmartLearnApi.domain.repository.CourseWeekRepository;
 import com.bardales.SmartLearnApi.domain.repository.ExamAttemptRepository;
 import com.bardales.SmartLearnApi.domain.repository.ExamRepository;
 import com.bardales.SmartLearnApi.domain.repository.UserRepository;
@@ -58,6 +59,9 @@ class CourseServiceTest {
     private CourseSessionContentRepository courseSessionContentRepository;
 
     @Mock
+    private CourseWeekRepository courseWeekRepository;
+
+    @Mock
     private CourseCompetencyRepository courseCompetencyRepository;
 
     @Mock
@@ -81,6 +85,7 @@ class CourseServiceTest {
                 courseMembershipRepository,
                 courseExamRepository,
                 courseSessionRepository,
+                courseWeekRepository,
                 courseSessionContentRepository,
                 courseCompetencyRepository,
                 examAttemptRepository,
@@ -163,6 +168,8 @@ class CourseServiceTest {
         when(examRepository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(1L)).thenReturn(List.of());
 
         when(courseSessionRepository.findByCourseIdAndDeletedAtIsNullOrderByCreatedAtDesc(10L)).thenReturn(List.of(session));
+        when(courseWeekRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(12L))
+                .thenReturn(List.of());
         when(courseSessionContentRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByCreatedAtAsc(12L))
                 .thenReturn(List.of(content));
         when(courseExamRepository.findByCourseIdOrderByCreatedAtAsc(10L)).thenReturn(List.of(courseExam));
@@ -292,4 +299,3 @@ class CourseServiceTest {
         ReflectionTestUtils.setField(target, "updatedAt", LocalDateTime.now());
     }
 }
-
