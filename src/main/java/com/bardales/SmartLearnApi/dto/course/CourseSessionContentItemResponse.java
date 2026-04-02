@@ -14,4 +14,5 @@ public record CourseSessionContentItemResponse(
         String weekName,
         Long sourceExamId,
         String sourceExamName,
+        Integer contentOrder,
         LocalDateTime createdAt) {}

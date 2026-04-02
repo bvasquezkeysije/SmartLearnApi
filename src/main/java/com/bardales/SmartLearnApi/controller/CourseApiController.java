@@ -15,6 +15,7 @@ import com.bardales.SmartLearnApi.dto.course.CourseSessionCreateRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseSessionUpdateRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseSetExamsRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseUpdateRequest;
+import com.bardales.SmartLearnApi.dto.course.CourseWeekContentReorderRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseWeekSaveRequest;
 import com.bardales.SmartLearnApi.service.CourseService;
 import jakarta.validation.Valid;
@@ -163,6 +164,15 @@ public class CourseApiController {
             @PathVariable Long weekId,
             @RequestParam Long userId) {
         return courseService.deleteCourseWeek(courseId, sessionId, weekId, userId);
+    }
+
+    @PatchMapping("/{courseId}/sessions/{sessionId}/weeks/{weekId}/contents/order")
+    public CourseResponse reorderWeekContents(
+            @PathVariable Long courseId,
+            @PathVariable Long sessionId,
+            @PathVariable Long weekId,
+            @Valid @RequestBody CourseWeekContentReorderRequest request) {
+        return courseService.reorderWeekContents(courseId, sessionId, weekId, request);
     }
 
     @PostMapping("/{courseId}/sessions/{sessionId}/contents")

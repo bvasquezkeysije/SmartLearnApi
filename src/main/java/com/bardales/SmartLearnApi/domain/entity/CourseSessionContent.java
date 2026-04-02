@@ -27,6 +27,9 @@ public class CourseSessionContent extends BaseEntity {
     @Column(name = "title", nullable = false)
     private String title;
 
+    @Column(name = "content_order", nullable = false)
+    private Integer contentOrder;
+
     @Column(name = "external_link")
     private String externalLink;
 
@@ -73,6 +76,14 @@ public class CourseSessionContent extends BaseEntity {
 
     public void setTitle(String title) {
         this.title = title;
+    }
+
+    public Integer getContentOrder() {
+        return contentOrder;
+    }
+
+    public void setContentOrder(Integer contentOrder) {
+        this.contentOrder = contentOrder;
     }
 
     public String getExternalLink() {

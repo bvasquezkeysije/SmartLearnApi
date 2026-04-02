@@ -170,7 +170,7 @@ class CourseServiceTest {
         when(courseSessionRepository.findByCourseIdAndDeletedAtIsNullOrderByCreatedAtDesc(10L)).thenReturn(List.of(session));
         when(courseWeekRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(12L))
                 .thenReturn(List.of());
-        when(courseSessionContentRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByCreatedAtAsc(12L))
+        when(courseSessionContentRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByContentOrderAscCreatedAtAsc(12L))
                 .thenReturn(List.of(content));
         when(courseExamRepository.findByCourseIdOrderByCreatedAtAsc(10L)).thenReturn(List.of(courseExam));
         when(courseMembershipRepository.findByCourseIdAndDeletedAtIsNullOrderByCreatedAtAsc(10L))
