@@ -147,6 +147,14 @@ public class ExamService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public ExamSummaryResponse getExamSummary(Long examId, Long userId) {
+        requireExamCanPractice(examId, userId);
+        Exam exam = examRepository.findByIdAndDeletedAtIsNull(examId)
+                .orElseThrow(() -> new NotFoundException("Examen no encontrado"));
+        return toExamSummary(exam, userId);
+    }
+
     @Transactional
     public ExamSummaryResponse createManualExam(ManualExamCreateRequest request) {
         User user = requireUser(request.userId());

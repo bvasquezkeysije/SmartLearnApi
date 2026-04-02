@@ -55,6 +55,11 @@ public class ExamApiController {
         return examService.listExams(userId);
     }
 
+    @GetMapping("/{examId}/summary")
+    public ExamSummaryResponse getExamSummary(@PathVariable Long examId, @RequestParam Long userId) {
+        return examService.getExamSummary(examId, userId);
+    }
+
     @PostMapping("/manual")
     public ExamSummaryResponse createManual(@Valid @RequestBody ManualExamCreateRequest request) {
         return examService.createManualExam(request);
