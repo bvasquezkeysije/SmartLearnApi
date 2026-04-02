@@ -42,6 +42,18 @@ public class ExamGroupSession extends BaseEntity {
     @Column(name = "current_question_started_at")
     private LocalDateTime currentQuestionStartedAt;
 
+    @Column(name = "phase", nullable = false)
+    private String phase = "open";
+
+    @Column(name = "phase_started_at")
+    private LocalDateTime phaseStartedAt;
+
+    @Column(name = "phase_ends_at")
+    private LocalDateTime phaseEndsAt;
+
+    @Column(name = "question_version", nullable = false)
+    private Integer questionVersion = 1;
+
     @Column(name = "finished_at")
     private LocalDateTime finishedAt;
 
@@ -118,6 +130,38 @@ public class ExamGroupSession extends BaseEntity {
 
     public void setCurrentQuestionStartedAt(LocalDateTime currentQuestionStartedAt) {
         this.currentQuestionStartedAt = currentQuestionStartedAt;
+    }
+
+    public String getPhase() {
+        return phase;
+    }
+
+    public void setPhase(String phase) {
+        this.phase = phase;
+    }
+
+    public LocalDateTime getPhaseStartedAt() {
+        return phaseStartedAt;
+    }
+
+    public void setPhaseStartedAt(LocalDateTime phaseStartedAt) {
+        this.phaseStartedAt = phaseStartedAt;
+    }
+
+    public LocalDateTime getPhaseEndsAt() {
+        return phaseEndsAt;
+    }
+
+    public void setPhaseEndsAt(LocalDateTime phaseEndsAt) {
+        this.phaseEndsAt = phaseEndsAt;
+    }
+
+    public Integer getQuestionVersion() {
+        return questionVersion;
+    }
+
+    public void setQuestionVersion(Integer questionVersion) {
+        this.questionVersion = questionVersion;
     }
 
     public LocalDateTime getFinishedAt() {

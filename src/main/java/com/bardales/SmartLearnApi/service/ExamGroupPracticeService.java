@@ -47,6 +47,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class ExamGroupPracticeService {
     // Equilibrio entre evitar "usuarios fantasma" y tolerar jitter de red.
     private static final long MEMBER_PRESENCE_TIMEOUT_SECONDS = 30;
+    private static final String PHASE_OPEN = "open";
+    private static final String PHASE_REVIEW = "review";
 
     private final ExamRepository examRepository;
     private final UserRepository userRepository;
@@ -99,6 +101,7 @@ public class ExamGroupPracticeService {
 
         ensureSessionMember(session, access.user());
         session = refreshSessionPresence(session);
+        session = syncSessionPhase(session);
         return toGroupState(session, access.user().getId(), access.canStartGroup());
     }
 
@@ -114,6 +117,7 @@ public class ExamGroupPracticeService {
                 .orElse(null);
         if (existing != null) {
             existing = refreshSessionPresence(existing);
+            existing = syncSessionPhase(existing);
             if ("finished".equals(normalizeStatus(existing.getStatus()))) {
                 existing = null;
             }
@@ -187,6 +191,10 @@ public class ExamGroupPracticeService {
         session.setCurrentQuestionIndex(0);
         session.setStartedAt(now);
         session.setCurrentQuestionStartedAt(now);
+        session.setPhase(PHASE_OPEN);
+        session.setPhaseStartedAt(now);
+        session.setPhaseEndsAt(resolveQuestionDeadline(resolveCurrentQuestion(session).orElse(null), now));
+        session.setQuestionVersion(1);
         session.setFinishedAt(null);
         session = examGroupSessionRepository.save(session);
 
@@ -216,6 +224,7 @@ public class ExamGroupPracticeService {
         }
 
         session = refreshSessionPresence(session);
+        session = syncSessionPhase(session);
 
         return toGroupState(session, userId, access.canStartGroup());
     }
@@ -245,15 +254,25 @@ public class ExamGroupPracticeService {
         ExamGroupSession session = requireSession(examId, request.sessionId());
         ensureSessionMember(session, access.user());
         session = refreshSessionPresence(session);
+        session = syncSessionPhase(session);
 
         if (!"active".equals(normalizeStatus(session.getStatus()))) {
             throw new BadRequestException("La sesion grupal no esta activa.");
+        }
+
+        if (!PHASE_OPEN.equals(normalizePhase(session.getPhase()))) {
+            throw new BadRequestException("La pregunta actual ya esta en revision.");
         }
 
         Question currentQuestion = resolveCurrentQuestion(session)
                 .orElseThrow(() -> new BadRequestException("No hay pregunta activa en esta sesion grupal."));
         if (!currentQuestion.getId().equals(request.questionId())) {
             throw new BadRequestException("La pregunta enviada no coincide con la pregunta actual del grupo.");
+        }
+        if (request.questionVersion() != null
+                && request.questionVersion() > 0
+                && !request.questionVersion().equals(session.getQuestionVersion())) {
+            throw new BadRequestException("Tu respuesta pertenece a una version anterior de la pregunta.");
         }
 
         List<ExamGroupSessionAnswer> storedAnswers = examGroupSessionAnswerRepository
@@ -291,7 +310,7 @@ public class ExamGroupPracticeService {
         answer.setIsCorrect(isCorrect);
         answer.setAnsweredAt(LocalDateTime.now());
         examGroupSessionAnswerRepository.save(answer);
-
+        session = syncSessionPhase(session);
         return toGroupState(session, access.user().getId(), access.canStartGroup());
     }
 
@@ -318,9 +337,17 @@ public class ExamGroupPracticeService {
             session.setStatus("finished");
             session.setFinishedAt(LocalDateTime.now());
             session.setCurrentQuestionStartedAt(null);
+            session.setPhase(PHASE_OPEN);
+            session.setPhaseStartedAt(null);
+            session.setPhaseEndsAt(null);
         } else {
             session.setCurrentQuestionIndex(currentIndex + 1);
-            session.setCurrentQuestionStartedAt(LocalDateTime.now());
+            LocalDateTime now = LocalDateTime.now();
+            session.setCurrentQuestionStartedAt(now);
+            session.setPhase(PHASE_OPEN);
+            session.setPhaseStartedAt(now);
+            session.setPhaseEndsAt(resolveQuestionDeadline(resolveCurrentQuestion(session).orElse(null), now));
+            session.setQuestionVersion((session.getQuestionVersion() == null ? 1 : session.getQuestionVersion()) + 1);
         }
 
         session = examGroupSessionRepository.save(session);
@@ -343,6 +370,9 @@ public class ExamGroupPracticeService {
             session.setStartedAt(now);
         }
         session.setCurrentQuestionStartedAt(null);
+        session.setPhase(PHASE_OPEN);
+        session.setPhaseStartedAt(null);
+        session.setPhaseEndsAt(null);
         session.setFinishedAt(now);
         session = examGroupSessionRepository.save(session);
 
@@ -401,6 +431,10 @@ public class ExamGroupPracticeService {
         newSession.setCurrentQuestionIndex(0);
         newSession.setStartedAt(null);
         newSession.setCurrentQuestionStartedAt(null);
+        newSession.setPhase(PHASE_OPEN);
+        newSession.setPhaseStartedAt(null);
+        newSession.setPhaseEndsAt(null);
+        newSession.setQuestionVersion(1);
         newSession.setFinishedAt(null);
         newSession = examGroupSessionRepository.save(newSession);
 
@@ -665,8 +699,12 @@ public class ExamGroupPracticeService {
         LocalDateTime questionStartedAt = null;
         Long questionStartedAtEpochMs = null;
         Integer firstAnswerElapsedSeconds = null;
+        String phase = normalizePhase(session.getPhase());
+        LocalDateTime phaseStartedAt = session.getPhaseStartedAt();
+        LocalDateTime phaseEndsAt = session.getPhaseEndsAt();
+        Integer questionVersion = session.getQuestionVersion() == null ? 1 : session.getQuestionVersion();
         Boolean reviewActive = Boolean.FALSE;
-        Integer reviewSecondsRemaining = null;
+        Integer reviewSecondsRemaining = 0;
         if ("active".equals(status) && currentQuestion != null) {
             questionStartedAt = session.getCurrentQuestionStartedAt() != null
                     ? session.getCurrentQuestionStartedAt()
@@ -680,51 +718,10 @@ public class ExamGroupPracticeService {
                     firstAnswerElapsedSeconds = (int) seconds;
                 }
             }
-
-            if (questionStartedAt != null) {
-                LocalDateTime now = LocalDateTime.now();
-                int timerSeconds = Math.max(0, currentQuestion.getTemporizadorSegundos() == null ? 0 : currentQuestion.getTemporizadorSegundos());
-                int revealSeconds = Math.max(1, currentQuestion.getReviewSeconds() == null ? 10 : currentQuestion.getReviewSeconds());
-
-                LocalDateTime timerExpiredAt = timerSeconds > 0 ? questionStartedAt.plusSeconds(timerSeconds) : null;
-
-                LocalDateTime allAnsweredAt = null;
-                if (allAnsweredCurrent) {
-                    List<Long> connectedUserIds = participants.stream()
-                            .filter(participant -> Boolean.TRUE.equals(participant.connected()))
-                            .map(ExamGroupParticipantStateResponse::userId)
-                            .filter(userId -> userId != null)
-                            .toList();
-                    for (Long connectedUserId : connectedUserIds) {
-                        ExamGroupSessionAnswer participantAnswer = answerByUserId.get(connectedUserId);
-                        if (participantAnswer == null || participantAnswer.getAnsweredAt() == null) {
-                            allAnsweredAt = null;
-                            break;
-                        }
-                        if (allAnsweredAt == null || participantAnswer.getAnsweredAt().isAfter(allAnsweredAt)) {
-                            allAnsweredAt = participantAnswer.getAnsweredAt();
-                        }
-                    }
-                }
-
-                LocalDateTime reviewStartedAt = null;
-                if (timerExpiredAt != null && allAnsweredAt != null) {
-                    reviewStartedAt = timerExpiredAt.isBefore(allAnsweredAt) ? timerExpiredAt : allAnsweredAt;
-                } else if (timerExpiredAt != null) {
-                    reviewStartedAt = timerExpiredAt;
-                } else if (allAnsweredAt != null) {
-                    reviewStartedAt = allAnsweredAt;
-                }
-
-                if (reviewStartedAt != null && !now.isBefore(reviewStartedAt)) {
-                    long elapsedReviewSeconds = Math.max(0, Duration.between(reviewStartedAt, now).getSeconds());
-                    long remaining = Math.max(0, revealSeconds - elapsedReviewSeconds);
-                    reviewActive = remaining > 0;
-                    reviewSecondsRemaining = (int) remaining;
-                } else {
-                    reviewActive = Boolean.FALSE;
-                    reviewSecondsRemaining = null;
-                }
+            if (PHASE_REVIEW.equals(phase) && phaseEndsAt != null) {
+                long remaining = Math.max(0, Duration.between(LocalDateTime.now(), phaseEndsAt).getSeconds());
+                reviewActive = remaining > 0;
+                reviewSecondsRemaining = (int) remaining;
             }
         }
 
@@ -749,6 +746,10 @@ public class ExamGroupPracticeService {
                 firstAnswerElapsedSeconds,
                 questionStartedAt,
                 questionStartedAtEpochMs,
+                phase,
+                phaseStartedAt,
+                phaseEndsAt,
+                questionVersion,
                 reviewActive,
                 reviewSecondsRemaining,
                 session.getStartedAt(),
@@ -995,6 +996,129 @@ public class ExamGroupPracticeService {
         return values;
     }
 
+    private ExamGroupSession syncSessionPhase(ExamGroupSession session) {
+        if (session == null) {
+            return null;
+        }
+        if (!"active".equals(normalizeStatus(session.getStatus()))) {
+            return session;
+        }
+
+        Question currentQuestion = resolveCurrentQuestion(session).orElse(null);
+        if (currentQuestion == null) {
+            return session;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        boolean changed = false;
+        String phase = normalizePhase(session.getPhase());
+        LocalDateTime questionStartedAt = session.getCurrentQuestionStartedAt() != null
+                ? session.getCurrentQuestionStartedAt()
+                : session.getStartedAt();
+        if (questionStartedAt == null) {
+            questionStartedAt = now;
+            session.setCurrentQuestionStartedAt(now);
+            changed = true;
+        }
+
+        if (PHASE_OPEN.equals(phase)) {
+            if (session.getPhaseStartedAt() == null) {
+                session.setPhaseStartedAt(questionStartedAt);
+                changed = true;
+            }
+            LocalDateTime expectedDeadline = resolveQuestionDeadline(currentQuestion, questionStartedAt);
+            if ((session.getPhaseEndsAt() == null && expectedDeadline != null)
+                    || (session.getPhaseEndsAt() != null && expectedDeadline == null)
+                    || (session.getPhaseEndsAt() != null && expectedDeadline != null && !session.getPhaseEndsAt().equals(expectedDeadline))) {
+                session.setPhaseEndsAt(expectedDeadline);
+                changed = true;
+            }
+
+            boolean timerExpired = session.getPhaseEndsAt() != null && !now.isBefore(session.getPhaseEndsAt());
+            boolean allConnectedAnswered = hasAllConnectedAnswered(session.getId(), currentQuestion.getId());
+            if (timerExpired || allConnectedAnswered) {
+                int reviewSeconds = Math.max(1, currentQuestion.getReviewSeconds() == null ? 10 : currentQuestion.getReviewSeconds());
+                session.setPhase(PHASE_REVIEW);
+                session.setPhaseStartedAt(now);
+                session.setPhaseEndsAt(now.plusSeconds(reviewSeconds));
+                changed = true;
+                phase = PHASE_REVIEW;
+            }
+        }
+
+        if (PHASE_REVIEW.equals(phase)) {
+            LocalDateTime reviewEndsAt = session.getPhaseEndsAt();
+            if (reviewEndsAt != null && !now.isBefore(reviewEndsAt)) {
+                int currentIndex = session.getCurrentQuestionIndex() == null ? 0 : session.getCurrentQuestionIndex();
+                int totalQuestions = session.getTotalQuestions() == null ? 0 : session.getTotalQuestions();
+                if (currentIndex + 1 >= totalQuestions) {
+                    session.setStatus("finished");
+                    session.setFinishedAt(now);
+                    session.setCurrentQuestionStartedAt(null);
+                    session.setPhase(PHASE_OPEN);
+                    session.setPhaseStartedAt(null);
+                    session.setPhaseEndsAt(null);
+                } else {
+                    session.setCurrentQuestionIndex(currentIndex + 1);
+                    session.setCurrentQuestionStartedAt(now);
+                    session.setPhase(PHASE_OPEN);
+                    session.setPhaseStartedAt(now);
+                    Question nextQuestion = resolveCurrentQuestion(session).orElse(null);
+                    session.setPhaseEndsAt(resolveQuestionDeadline(nextQuestion, now));
+                    session.setQuestionVersion((session.getQuestionVersion() == null ? 1 : session.getQuestionVersion()) + 1);
+                }
+                changed = true;
+            }
+        }
+
+        return changed ? examGroupSessionRepository.save(session) : session;
+    }
+
+    private boolean hasAllConnectedAnswered(Long sessionId, Long questionId) {
+        if (sessionId == null || questionId == null) {
+            return false;
+        }
+        List<ExamGroupSessionMember> members =
+                examGroupSessionMemberRepository.findBySessionIdAndDeletedAtIsNullOrderByCreatedAtAsc(sessionId);
+        List<Long> connectedUserIds = members.stream()
+                .filter(member -> Boolean.TRUE.equals(member.getConnected()))
+                .map(member -> member.getUser() == null ? null : member.getUser().getId())
+                .filter(userId -> userId != null)
+                .toList();
+        if (connectedUserIds.isEmpty()) {
+            return false;
+        }
+        Map<Long, ExamGroupSessionAnswer> answerByUserId = new HashMap<>();
+        for (ExamGroupSessionAnswer answer : examGroupSessionAnswerRepository.findForQuestion(sessionId, questionId)) {
+            if (answer == null || answer.getUser() == null || answer.getUser().getId() == null) {
+                continue;
+            }
+            Long userId = answer.getUser().getId();
+            ExamGroupSessionAnswer existing = answerByUserId.get(userId);
+            if (existing == null || compareAnswerPriority(answer, existing) > 0) {
+                answerByUserId.put(userId, answer);
+            }
+        }
+        for (Long connectedUserId : connectedUserIds) {
+            ExamGroupSessionAnswer answer = answerByUserId.get(connectedUserId);
+            if (answer == null || trimOrNull(answer.getSelectedAnswer()) == null) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private LocalDateTime resolveQuestionDeadline(Question question, LocalDateTime startedAt) {
+        if (question == null || startedAt == null) {
+            return null;
+        }
+        int timerSeconds = Math.max(0, question.getTemporizadorSegundos() == null ? 0 : question.getTemporizadorSegundos());
+        if (timerSeconds <= 0) {
+            return null;
+        }
+        return startedAt.plusSeconds(timerSeconds);
+    }
+
     private String normalizeStatus(String value) {
         String normalized = trimOrNull(value);
         if (normalized == null) {
@@ -1005,6 +1129,15 @@ public class ExamGroupPracticeService {
             return normalized;
         }
         return "waiting";
+    }
+
+    private String normalizePhase(String value) {
+        String normalized = trimOrNull(value);
+        if (normalized == null) {
+            return PHASE_OPEN;
+        }
+        normalized = normalized.toLowerCase(Locale.ROOT);
+        return PHASE_REVIEW.equals(normalized) ? PHASE_REVIEW : PHASE_OPEN;
     }
 
     private String normalizeVisibility(String value) {

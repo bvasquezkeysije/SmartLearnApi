@@ -6,5 +6,6 @@ public record ExamGroupAnswerRequest(
         @NotNull(message = "userId es obligatorio") Long userId,
         @NotNull(message = "sessionId es obligatorio") Long sessionId,
         @NotNull(message = "questionId es obligatorio") Long questionId,
+        Integer questionVersion,
         String selectedOption,
         String writtenAnswer) {}
