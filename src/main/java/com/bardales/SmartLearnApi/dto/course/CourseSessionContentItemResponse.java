@@ -9,6 +9,9 @@ public record CourseSessionContentItemResponse(
         String externalLink,
         String fileName,
         String fileData,
+        Long weekId,
+        Integer weekOrder,
+        String weekName,
         Long sourceExamId,
         String sourceExamName,
         LocalDateTime createdAt) {}

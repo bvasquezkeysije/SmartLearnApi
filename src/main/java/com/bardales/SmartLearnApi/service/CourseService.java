@@ -6,6 +6,7 @@ import com.bardales.SmartLearnApi.domain.entity.CourseExam;
 import com.bardales.SmartLearnApi.domain.entity.CourseMembership;
 import com.bardales.SmartLearnApi.domain.entity.CourseSession;
 import com.bardales.SmartLearnApi.domain.entity.CourseSessionContent;
+import com.bardales.SmartLearnApi.domain.entity.CourseWeek;
 import com.bardales.SmartLearnApi.domain.entity.Exam;
 import com.bardales.SmartLearnApi.domain.entity.ExamAttempt;
 import com.bardales.SmartLearnApi.domain.entity.User;
@@ -15,6 +16,7 @@ import com.bardales.SmartLearnApi.domain.repository.CourseMembershipRepository;
 import com.bardales.SmartLearnApi.domain.repository.CourseRepository;
 import com.bardales.SmartLearnApi.domain.repository.CourseSessionContentRepository;
 import com.bardales.SmartLearnApi.domain.repository.CourseSessionRepository;
+import com.bardales.SmartLearnApi.domain.repository.CourseWeekRepository;
 import com.bardales.SmartLearnApi.domain.repository.ExamAttemptRepository;
 import com.bardales.SmartLearnApi.domain.repository.ExamRepository;
 import com.bardales.SmartLearnApi.domain.repository.UserRepository;
@@ -35,6 +37,8 @@ import com.bardales.SmartLearnApi.dto.course.CourseSessionContentSaveRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseSessionCreateRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseSessionItemResponse;
 import com.bardales.SmartLearnApi.dto.course.CourseSessionUpdateRequest;
+import com.bardales.SmartLearnApi.dto.course.CourseWeekItemResponse;
+import com.bardales.SmartLearnApi.dto.course.CourseWeekSaveRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseSetExamsRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseUpdateRequest;
 import com.bardales.SmartLearnApi.exception.BadRequestException;
@@ -57,6 +61,7 @@ public class CourseService {
     private final CourseMembershipRepository courseMembershipRepository;
     private final CourseExamRepository courseExamRepository;
     private final CourseSessionRepository courseSessionRepository;
+    private final CourseWeekRepository courseWeekRepository;
     private final CourseSessionContentRepository courseSessionContentRepository;
     private final CourseCompetencyRepository courseCompetencyRepository;
     private final ExamAttemptRepository examAttemptRepository;
@@ -69,6 +74,7 @@ public class CourseService {
             CourseMembershipRepository courseMembershipRepository,
             CourseExamRepository courseExamRepository,
             CourseSessionRepository courseSessionRepository,
+            CourseWeekRepository courseWeekRepository,
             CourseSessionContentRepository courseSessionContentRepository,
             CourseCompetencyRepository courseCompetencyRepository,
             ExamAttemptRepository examAttemptRepository,
@@ -79,6 +85,7 @@ public class CourseService {
         this.courseMembershipRepository = courseMembershipRepository;
         this.courseExamRepository = courseExamRepository;
         this.courseSessionRepository = courseSessionRepository;
+        this.courseWeekRepository = courseWeekRepository;
         this.courseSessionContentRepository = courseSessionContentRepository;
         this.courseCompetencyRepository = courseCompetencyRepository;
         this.examAttemptRepository = examAttemptRepository;
@@ -289,6 +296,7 @@ public class CourseService {
         session.setName(sessionName);
         session.setWeeklyContent(trimOrNull(request.weeklyContent()));
         courseSessionRepository.save(session);
+        resolveOrCreateDefaultWeek(session);
 
         return toCourseResponse(course);
     }
@@ -311,6 +319,88 @@ public class CourseService {
     }
 
     @Transactional
+    public CourseResponse addCourseWeek(Long courseId, Long sessionId, CourseWeekSaveRequest request) {
+        CourseSession session = requireCourseSessionOwnedByUser(sessionId, request.userId());
+        Course course = session.getCourse();
+        if (course == null || course.getDeletedAt() != null || !course.getId().equals(courseId)) {
+            throw new NotFoundException("Curso no encontrado");
+        }
+
+        Integer weekOrder = normalizeWeekOrder(request.weekOrder(), session.getId(), null);
+        String weekName = trimOrNull(request.name());
+        if (weekName == null) {
+            weekName = "SEMANA " + weekOrder + ": Inicio";
+        }
+
+        CourseWeek week = new CourseWeek();
+        week.setCourseSession(session);
+        week.setWeekOrder(weekOrder);
+        week.setName(weekName);
+        week.setDescription(trimOrNull(request.description()));
+        courseWeekRepository.save(week);
+
+        return toCourseResponse(course);
+    }
+
+    @Transactional
+    public CourseResponse updateCourseWeek(Long courseId, Long sessionId, Long weekId, CourseWeekSaveRequest request) {
+        CourseSession session = requireCourseSessionOwnedByUser(sessionId, request.userId());
+        Course course = session.getCourse();
+        if (course == null || course.getDeletedAt() != null || !course.getId().equals(courseId)) {
+            throw new NotFoundException("Curso no encontrado");
+        }
+
+        CourseWeek week = courseWeekRepository
+                .findByIdAndCourseSessionIdAndDeletedAtIsNull(weekId, session.getId())
+                .orElseThrow(() -> new NotFoundException("Semana no encontrada"));
+
+        Integer weekOrder = request.weekOrder() == null
+                ? (week.getWeekOrder() == null ? 1 : week.getWeekOrder())
+                : normalizeWeekOrder(request.weekOrder(), session.getId(), week.getId());
+        String weekName = request.name() == null ? trimOrNull(week.getName()) : trimOrNull(request.name());
+        if (weekName == null) {
+            weekName = "SEMANA " + weekOrder + ": Inicio";
+        }
+
+        week.setWeekOrder(weekOrder);
+        week.setName(weekName);
+        if (request.description() != null) {
+            week.setDescription(trimOrNull(request.description()));
+        }
+        courseWeekRepository.save(week);
+
+        return toCourseResponse(course);
+    }
+
+    @Transactional
+    public CourseResponse deleteCourseWeek(Long courseId, Long sessionId, Long weekId, Long userId) {
+        CourseSession session = requireCourseSessionOwnedByUser(sessionId, userId);
+        Course course = session.getCourse();
+        if (course == null || course.getDeletedAt() != null || !course.getId().equals(courseId)) {
+            throw new NotFoundException("Curso no encontrado");
+        }
+
+        CourseWeek week = courseWeekRepository
+                .findByIdAndCourseSessionIdAndDeletedAtIsNull(weekId, session.getId())
+                .orElseThrow(() -> new NotFoundException("Semana no encontrada"));
+
+        LocalDateTime now = LocalDateTime.now();
+        week.setDeletedAt(now);
+        courseWeekRepository.save(week);
+
+        List<CourseSessionContent> contents = courseSessionContentRepository
+                .findByCourseWeekIdAndDeletedAtIsNullOrderByCreatedAtAsc(week.getId());
+        for (CourseSessionContent content : contents) {
+            content.setDeletedAt(now);
+        }
+        if (!contents.isEmpty()) {
+            courseSessionContentRepository.saveAll(contents);
+        }
+
+        return toCourseResponse(course);
+    }
+
+    @Transactional
     public CourseResponse addCourseSessionContent(
             Long courseId, Long sessionId, CourseSessionContentSaveRequest request) {
         CourseSession session = requireCourseSessionOwnedByUser(sessionId, request.userId());
@@ -326,6 +416,7 @@ public class CourseService {
 
         CourseSessionContent content = new CourseSessionContent();
         content.setCourseSession(session);
+        content.setCourseWeek(resolveWeekForContent(session, request.weekId()));
         content.setType(type);
         content.setTitle(title);
         applyContentData(
@@ -365,6 +456,9 @@ public class CourseService {
 
         content.setType(type);
         content.setTitle(title);
+        if (request.weekId() != null || content.getCourseWeek() == null) {
+            content.setCourseWeek(resolveWeekForContent(session, request.weekId()));
+        }
         Long resolvedSourceExamId = request.sourceExamId() == null
                 ? (content.getSourceExam() == null ? null : content.getSourceExam().getId())
                 : request.sourceExamId();
@@ -376,6 +470,52 @@ public class CourseService {
                 request.fileData() == null ? content.getFileData() : request.fileData(),
                 resolvedSourceExamId,
                 request.userId());
+        courseSessionContentRepository.save(content);
+        return toCourseResponse(course);
+    }
+
+    @Transactional
+    public CourseResponse deleteCourseSession(Long courseId, Long sessionId, Long userId) {
+        CourseSession session = requireCourseSessionOwnedByUser(sessionId, userId);
+        Course course = session.getCourse();
+        if (course == null || course.getDeletedAt() != null || !course.getId().equals(courseId)) {
+            throw new NotFoundException("Curso no encontrado");
+        }
+        LocalDateTime now = LocalDateTime.now();
+        session.setDeletedAt(now);
+        courseSessionRepository.save(session);
+
+        List<CourseWeek> weeks =
+                courseWeekRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(session.getId());
+        for (CourseWeek week : weeks) {
+            week.setDeletedAt(now);
+        }
+        if (!weeks.isEmpty()) {
+            courseWeekRepository.saveAll(weeks);
+        }
+
+        List<CourseSessionContent> contents =
+                courseSessionContentRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByCreatedAtAsc(session.getId());
+        for (CourseSessionContent content : contents) {
+            content.setDeletedAt(now);
+        }
+        if (!contents.isEmpty()) {
+            courseSessionContentRepository.saveAll(contents);
+        }
+        return toCourseResponse(course);
+    }
+
+    @Transactional
+    public CourseResponse deleteCourseSessionContent(Long courseId, Long sessionId, Long contentId, Long userId) {
+        CourseSession session = requireCourseSessionOwnedByUser(sessionId, userId);
+        Course course = session.getCourse();
+        if (course == null || course.getDeletedAt() != null || !course.getId().equals(courseId)) {
+            throw new NotFoundException("Curso no encontrado");
+        }
+        CourseSessionContent content = courseSessionContentRepository
+                .findByIdAndCourseSessionIdAndDeletedAtIsNull(contentId, session.getId())
+                .orElseThrow(() -> new NotFoundException("Contenido de sesion no encontrado"));
+        content.setDeletedAt(LocalDateTime.now());
         courseSessionContentRepository.save(content);
         return toCourseResponse(course);
     }
@@ -1093,21 +1233,45 @@ public class CourseService {
             normalizedSessionName = "Sesion";
         }
         String normalizedWeeklyContent = trimOrNull(session.getWeeklyContent());
-        List<CourseSessionContentItemResponse> contents = courseSessionContentRepository
+        List<CourseSessionContent> rawContents = courseSessionContentRepository
                 .findByCourseSessionIdAndDeletedAtIsNullOrderByCreatedAtAsc(session.getId())
                 .stream()
+                .toList();
+        List<CourseSessionContentItemResponse> contents = rawContents
+                .stream()
                 .map(this::toCourseSessionContentItem)
+                .toList();
+        Map<Long, List<CourseSessionContentItemResponse>> contentsByWeekId = new LinkedHashMap<>();
+        for (CourseSessionContentItemResponse content : contents) {
+            Long weekId = content.weekId();
+            if (weekId == null) {
+                continue;
+            }
+            contentsByWeekId.computeIfAbsent(weekId, ignored -> new ArrayList<>()).add(content);
+        }
+        List<CourseWeekItemResponse> weeks = courseWeekRepository
+                .findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(session.getId())
+                .stream()
+                .map(week -> new CourseWeekItemResponse(
+                        week.getId(),
+                        week.getWeekOrder(),
+                        trimOrNull(week.getName()),
+                        trimOrNull(week.getDescription()),
+                        contentsByWeekId.getOrDefault(week.getId(), List.of()),
+                        week.getCreatedAt()))
                 .toList();
         return new CourseSessionItemResponse(
                 session.getId(),
                 normalizedSessionName,
                 normalizedWeeklyContent,
+                weeks,
                 contents,
                 session.getCreatedAt());
     }
 
     private CourseSessionContentItemResponse toCourseSessionContentItem(CourseSessionContent content) {
         Exam sourceExam = content.getSourceExam();
+        CourseWeek week = content.getCourseWeek();
         return new CourseSessionContentItemResponse(
                 content.getId(),
                 trimOrNull(content.getType()),
@@ -1115,6 +1279,9 @@ public class CourseService {
                 trimOrNull(content.getExternalLink()),
                 trimOrNull(content.getFileName()),
                 trimOrNull(content.getFileData()),
+                week == null ? null : week.getId(),
+                week == null ? null : week.getWeekOrder(),
+                week == null ? null : trimOrNull(week.getName()),
                 sourceExam == null ? null : sourceExam.getId(),
                 sourceExam == null ? null : trimOrNull(sourceExam.getName()),
                 content.getCreatedAt());
@@ -1200,6 +1367,60 @@ public class CourseService {
             throw new BadRequestException("type debe ser video, pdf, word, cover o exam");
         }
         return normalized;
+    }
+
+    private Integer normalizeWeekOrder(Integer rawWeekOrder, Long sessionId, Long excludingWeekId) {
+        if (rawWeekOrder == null) {
+            int nextOrder = 1;
+            for (CourseWeek week : courseWeekRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(sessionId)) {
+                if (week == null || week.getWeekOrder() == null) {
+                    continue;
+                }
+                nextOrder = Math.max(nextOrder, week.getWeekOrder() + 1);
+            }
+            return nextOrder;
+        }
+        if (rawWeekOrder < 1) {
+            throw new BadRequestException("weekOrder debe ser mayor o igual a 1");
+        }
+        List<CourseWeek> weeks = courseWeekRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(sessionId);
+        for (CourseWeek week : weeks) {
+            if (week == null || week.getId() == null || week.getWeekOrder() == null) {
+                continue;
+            }
+            if (excludingWeekId != null && excludingWeekId.equals(week.getId())) {
+                continue;
+            }
+            if (rawWeekOrder.equals(week.getWeekOrder())) {
+                throw new BadRequestException("weekOrder ya existe en esta sesion");
+            }
+        }
+        return rawWeekOrder;
+    }
+
+    private CourseWeek resolveWeekForContent(CourseSession session, Long weekId) {
+        if (session == null || session.getId() == null) {
+            throw new NotFoundException("Sesion no encontrada");
+        }
+        if (weekId == null) {
+            return resolveOrCreateDefaultWeek(session);
+        }
+        return courseWeekRepository
+                .findByIdAndCourseSessionIdAndDeletedAtIsNull(weekId, session.getId())
+                .orElseThrow(() -> new BadRequestException("weekId no pertenece a la sesion"));
+    }
+
+    private CourseWeek resolveOrCreateDefaultWeek(CourseSession session) {
+        List<CourseWeek> weeks = courseWeekRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(session.getId());
+        if (!weeks.isEmpty()) {
+            return weeks.get(0);
+        }
+        CourseWeek week = new CourseWeek();
+        week.setCourseSession(session);
+        week.setWeekOrder(1);
+        week.setName("SEMANA 1: Inicio");
+        week.setDescription(trimOrNull(session.getWeeklyContent()));
+        return courseWeekRepository.save(week);
     }
 
     private void applyContentData(

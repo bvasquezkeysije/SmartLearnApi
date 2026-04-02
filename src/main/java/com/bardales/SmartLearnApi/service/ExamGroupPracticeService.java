@@ -705,6 +705,7 @@ public class ExamGroupPracticeService {
         Long phaseStartedAtEpochMs = phaseStartedAt == null ? null : phaseStartedAt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
         Long phaseEndsAtEpochMs = phaseEndsAt == null ? null : phaseEndsAt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
         Integer questionVersion = session.getQuestionVersion() == null ? 1 : session.getQuestionVersion();
+        Boolean revealAnswers = Boolean.FALSE;
         Boolean reviewActive = Boolean.FALSE;
         Integer reviewSecondsRemaining = 0;
         Long serverNowEpochMs = LocalDateTime.now().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
@@ -724,6 +725,7 @@ public class ExamGroupPracticeService {
             if (PHASE_REVIEW.equals(phase) && phaseEndsAt != null) {
                 long remaining = Math.max(0, Duration.between(LocalDateTime.now(), phaseEndsAt).getSeconds());
                 reviewActive = remaining > 0;
+                revealAnswers = reviewActive;
                 reviewSecondsRemaining = (int) remaining;
             }
         }
@@ -755,6 +757,7 @@ public class ExamGroupPracticeService {
                 phaseStartedAtEpochMs,
                 phaseEndsAtEpochMs,
                 questionVersion,
+                revealAnswers,
                 reviewActive,
                 reviewSecondsRemaining,
                 serverNowEpochMs,

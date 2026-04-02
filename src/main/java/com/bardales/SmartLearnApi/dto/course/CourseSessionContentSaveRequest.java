@@ -9,4 +9,5 @@ public record CourseSessionContentSaveRequest(
         String externalLink,
         String fileName,
         String fileData,
+        Long weekId,
         Long sourceExamId) {}

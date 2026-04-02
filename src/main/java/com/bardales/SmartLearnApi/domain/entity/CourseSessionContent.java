@@ -17,6 +17,10 @@ public class CourseSessionContent extends BaseEntity {
     @JoinColumn(name = "course_session_id", nullable = false)
     private CourseSession courseSession;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "course_week_id", nullable = false)
+    private CourseWeek courseWeek;
+
     @Column(name = "type", nullable = false)
     private String type;
 
@@ -45,6 +49,14 @@ public class CourseSessionContent extends BaseEntity {
 
     public void setCourseSession(CourseSession courseSession) {
         this.courseSession = courseSession;
+    }
+
+    public CourseWeek getCourseWeek() {
+        return courseWeek;
+    }
+
+    public void setCourseWeek(CourseWeek courseWeek) {
+        this.courseWeek = courseWeek;
     }
 
     public String getType() {

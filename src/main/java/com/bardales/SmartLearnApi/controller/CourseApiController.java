@@ -15,6 +15,7 @@ import com.bardales.SmartLearnApi.dto.course.CourseSessionCreateRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseSessionUpdateRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseSetExamsRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseUpdateRequest;
+import com.bardales.SmartLearnApi.dto.course.CourseWeekSaveRequest;
 import com.bardales.SmartLearnApi.service.CourseService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -130,6 +131,40 @@ public class CourseApiController {
         return courseService.updateCourseSession(courseId, sessionId, request);
     }
 
+    @DeleteMapping("/{courseId}/sessions/{sessionId}")
+    public CourseResponse deleteSession(
+            @PathVariable Long courseId,
+            @PathVariable Long sessionId,
+            @RequestParam Long userId) {
+        return courseService.deleteCourseSession(courseId, sessionId, userId);
+    }
+
+    @PostMapping("/{courseId}/sessions/{sessionId}/weeks")
+    public CourseResponse addWeek(
+            @PathVariable Long courseId,
+            @PathVariable Long sessionId,
+            @Valid @RequestBody CourseWeekSaveRequest request) {
+        return courseService.addCourseWeek(courseId, sessionId, request);
+    }
+
+    @PatchMapping("/{courseId}/sessions/{sessionId}/weeks/{weekId}")
+    public CourseResponse updateWeek(
+            @PathVariable Long courseId,
+            @PathVariable Long sessionId,
+            @PathVariable Long weekId,
+            @Valid @RequestBody CourseWeekSaveRequest request) {
+        return courseService.updateCourseWeek(courseId, sessionId, weekId, request);
+    }
+
+    @DeleteMapping("/{courseId}/sessions/{sessionId}/weeks/{weekId}")
+    public CourseResponse deleteWeek(
+            @PathVariable Long courseId,
+            @PathVariable Long sessionId,
+            @PathVariable Long weekId,
+            @RequestParam Long userId) {
+        return courseService.deleteCourseWeek(courseId, sessionId, weekId, userId);
+    }
+
     @PostMapping("/{courseId}/sessions/{sessionId}/contents")
     public CourseResponse addSessionContent(
             @PathVariable Long courseId,
@@ -145,6 +180,15 @@ public class CourseApiController {
             @PathVariable Long contentId,
             @Valid @RequestBody CourseSessionContentSaveRequest request) {
         return courseService.updateCourseSessionContent(courseId, sessionId, contentId, request);
+    }
+
+    @DeleteMapping("/{courseId}/sessions/{sessionId}/contents/{contentId}")
+    public CourseResponse deleteSessionContent(
+            @PathVariable Long courseId,
+            @PathVariable Long sessionId,
+            @PathVariable Long contentId,
+            @RequestParam Long userId) {
+        return courseService.deleteCourseSessionContent(courseId, sessionId, contentId, userId);
     }
 
     @PostMapping("/{courseId}/sessions/{sessionId}/contents/{contentId}/practice/start")

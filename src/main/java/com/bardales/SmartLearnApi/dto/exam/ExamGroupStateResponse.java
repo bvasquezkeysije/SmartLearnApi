@@ -26,6 +26,7 @@ public record ExamGroupStateResponse(
         Long phaseStartedAtEpochMs,
         Long phaseEndsAtEpochMs,
         Integer questionVersion,
+        Boolean revealAnswers,
         Boolean reviewActive,
         Integer reviewSecondsRemaining,
         Long serverNowEpochMs,
