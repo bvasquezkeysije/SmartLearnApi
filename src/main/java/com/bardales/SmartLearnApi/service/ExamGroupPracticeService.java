@@ -702,9 +702,12 @@ public class ExamGroupPracticeService {
         String phase = normalizePhase(session.getPhase());
         LocalDateTime phaseStartedAt = session.getPhaseStartedAt();
         LocalDateTime phaseEndsAt = session.getPhaseEndsAt();
+        Long phaseStartedAtEpochMs = phaseStartedAt == null ? null : phaseStartedAt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+        Long phaseEndsAtEpochMs = phaseEndsAt == null ? null : phaseEndsAt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
         Integer questionVersion = session.getQuestionVersion() == null ? 1 : session.getQuestionVersion();
         Boolean reviewActive = Boolean.FALSE;
         Integer reviewSecondsRemaining = 0;
+        Long serverNowEpochMs = LocalDateTime.now().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
         if ("active".equals(status) && currentQuestion != null) {
             questionStartedAt = session.getCurrentQuestionStartedAt() != null
                     ? session.getCurrentQuestionStartedAt()
@@ -749,9 +752,12 @@ public class ExamGroupPracticeService {
                 phase,
                 phaseStartedAt,
                 phaseEndsAt,
+                phaseStartedAtEpochMs,
+                phaseEndsAtEpochMs,
                 questionVersion,
                 reviewActive,
                 reviewSecondsRemaining,
+                serverNowEpochMs,
                 session.getStartedAt(),
                 session.getFinishedAt());
     }

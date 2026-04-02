@@ -23,8 +23,11 @@ public record ExamGroupStateResponse(
         String phase,
         LocalDateTime phaseStartedAt,
         LocalDateTime phaseEndsAt,
+        Long phaseStartedAtEpochMs,
+        Long phaseEndsAtEpochMs,
         Integer questionVersion,
         Boolean reviewActive,
         Integer reviewSecondsRemaining,
+        Long serverNowEpochMs,
         LocalDateTime startedAt,
         LocalDateTime finishedAt) {}
