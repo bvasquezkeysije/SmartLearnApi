@@ -20,5 +20,7 @@ public record ExamGroupStateResponse(
         Integer firstAnswerElapsedSeconds,
         LocalDateTime questionStartedAt,
         Long questionStartedAtEpochMs,
+        Boolean reviewActive,
+        Integer reviewSecondsRemaining,
         LocalDateTime startedAt,
         LocalDateTime finishedAt) {}

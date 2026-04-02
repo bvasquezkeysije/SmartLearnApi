@@ -665,6 +665,8 @@ public class ExamGroupPracticeService {
         LocalDateTime questionStartedAt = null;
         Long questionStartedAtEpochMs = null;
         Integer firstAnswerElapsedSeconds = null;
+        Boolean reviewActive = Boolean.FALSE;
+        Integer reviewSecondsRemaining = null;
         if ("active".equals(status) && currentQuestion != null) {
             questionStartedAt = session.getCurrentQuestionStartedAt() != null
                     ? session.getCurrentQuestionStartedAt()
@@ -676,6 +678,52 @@ public class ExamGroupPracticeService {
                 long seconds = Duration.between(questionStartedAt, firstAnsweredAt).getSeconds();
                 if (seconds >= 0 && seconds <= Integer.MAX_VALUE) {
                     firstAnswerElapsedSeconds = (int) seconds;
+                }
+            }
+
+            if (questionStartedAt != null) {
+                LocalDateTime now = LocalDateTime.now();
+                int timerSeconds = Math.max(0, currentQuestion.getTemporizadorSegundos() == null ? 0 : currentQuestion.getTemporizadorSegundos());
+                int revealSeconds = Math.max(1, currentQuestion.getReviewSeconds() == null ? 10 : currentQuestion.getReviewSeconds());
+
+                LocalDateTime timerExpiredAt = timerSeconds > 0 ? questionStartedAt.plusSeconds(timerSeconds) : null;
+
+                LocalDateTime allAnsweredAt = null;
+                if (allAnsweredCurrent) {
+                    List<Long> connectedUserIds = participants.stream()
+                            .filter(participant -> Boolean.TRUE.equals(participant.connected()))
+                            .map(ExamGroupParticipantStateResponse::userId)
+                            .filter(userId -> userId != null)
+                            .toList();
+                    for (Long connectedUserId : connectedUserIds) {
+                        ExamGroupSessionAnswer participantAnswer = answerByUserId.get(connectedUserId);
+                        if (participantAnswer == null || participantAnswer.getAnsweredAt() == null) {
+                            allAnsweredAt = null;
+                            break;
+                        }
+                        if (allAnsweredAt == null || participantAnswer.getAnsweredAt().isAfter(allAnsweredAt)) {
+                            allAnsweredAt = participantAnswer.getAnsweredAt();
+                        }
+                    }
+                }
+
+                LocalDateTime reviewStartedAt = null;
+                if (timerExpiredAt != null && allAnsweredAt != null) {
+                    reviewStartedAt = timerExpiredAt.isBefore(allAnsweredAt) ? timerExpiredAt : allAnsweredAt;
+                } else if (timerExpiredAt != null) {
+                    reviewStartedAt = timerExpiredAt;
+                } else if (allAnsweredAt != null) {
+                    reviewStartedAt = allAnsweredAt;
+                }
+
+                if (reviewStartedAt != null && !now.isBefore(reviewStartedAt)) {
+                    long elapsedReviewSeconds = Math.max(0, Duration.between(reviewStartedAt, now).getSeconds());
+                    long remaining = Math.max(0, revealSeconds - elapsedReviewSeconds);
+                    reviewActive = remaining > 0;
+                    reviewSecondsRemaining = (int) remaining;
+                } else {
+                    reviewActive = Boolean.FALSE;
+                    reviewSecondsRemaining = null;
                 }
             }
         }
@@ -701,6 +749,8 @@ public class ExamGroupPracticeService {
                 firstAnswerElapsedSeconds,
                 questionStartedAt,
                 questionStartedAtEpochMs,
+                reviewActive,
+                reviewSecondsRemaining,
                 session.getStartedAt(),
                 session.getFinishedAt());
     }
