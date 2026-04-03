@@ -71,6 +71,15 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, "No se pudo completar la operacion solicitada.");
     }
 
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalState(IllegalStateException ex) {
+        String message = ex.getMessage() == null ? "" : ex.getMessage();
+        if (message.startsWith("WRITE_IN_READONLY_TX:")) {
+            return build(HttpStatus.CONFLICT, "Operacion bloqueada: intento de escritura en transaccion de solo lectura.");
+        }
+        return build(HttpStatus.BAD_REQUEST, "Estado de operacion invalido.");
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleUnknown(Exception ex) {
         return build(HttpStatus.INTERNAL_SERVER_ERROR, "Error interno del servidor");

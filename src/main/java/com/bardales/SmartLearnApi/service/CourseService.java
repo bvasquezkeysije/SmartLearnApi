@@ -151,8 +151,6 @@ public class CourseService {
             coursesById.putIfAbsent(publicCourse.getId(), publicCourse);
         }
 
-        ensureRequesterExamMembershipsForCourses(coursesById.values(), userId);
-
         List<CourseResponse> courses = coursesById.values().stream().map(this::toCourseResponse).toList();
 
         List<CourseExamItemResponse> availableExams = examService.listExams(userId)
@@ -618,7 +616,7 @@ public class CourseService {
         return new CourseSessionContentPracticeStartResponse(sourceExam.getId(), examName);
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public ExamSummaryResponse getCourseSessionContentExamSummary(
             Long courseId, Long sessionId, Long contentId, Long userId) {
         Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, userId);
@@ -638,7 +636,7 @@ public class CourseService {
         examService.deleteExam(sourceExam.getId(), userId);
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public List<QuestionResponse> getCourseSessionContentExamQuestions(
             Long courseId, Long sessionId, Long contentId, Long userId) {
         Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, userId);
@@ -659,7 +657,7 @@ public class CourseService {
         return examService.updateManualQuestion(sourceExam.getId(), questionId, request);
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public List<ExamParticipantResponse> getCourseSessionContentExamParticipants(
             Long courseId, Long sessionId, Long contentId, Long userId) {
         Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, userId);
@@ -684,7 +682,7 @@ public class CourseService {
         examService.removeExamParticipant(sourceExam.getId(), participantUserId, requesterUserId);
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public ExamPracticeSettingsResponse getCourseSessionContentIndividualPracticeSettings(
             Long courseId, Long sessionId, Long contentId, Long userId) {
         Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, userId);
@@ -1570,47 +1568,6 @@ public class CourseService {
         }
 
         return sourceExam;
-    }
-
-    private void ensureRequesterExamMembershipsForCourses(Iterable<Course> courses, Long userId) {
-        if (userId == null) {
-            return;
-        }
-        User requester = null;
-        for (Course course : courses) {
-            if (course == null || course.getId() == null || !hasCourseAccess(course, userId)) {
-                continue;
-            }
-            Long ownerUserId = course.getUser() == null ? null : course.getUser().getId();
-            if (ownerUserId != null && ownerUserId.equals(userId)) {
-                continue;
-            }
-            List<CourseSessionContent> contents = courseSessionContentRepository
-                    .findByCourseSessionCourseIdAndDeletedAtIsNullOrderByContentOrderAscCreatedAtAsc(course.getId());
-            for (CourseSessionContent content : contents) {
-                if (content == null || content.getDeletedAt() != null) {
-                    continue;
-                }
-                String contentType = trimOrNull(content.getType());
-                if (contentType == null || !contentType.equalsIgnoreCase("exam")) {
-                    continue;
-                }
-                Exam sourceExam = content.getSourceExam();
-                if (sourceExam == null || sourceExam.getDeletedAt() != null) {
-                    continue;
-                }
-                if (requester == null) {
-                    requester = requireUser(userId);
-                }
-                examService.upsertExamMembership(
-                        sourceExam,
-                        requester,
-                        "viewer",
-                        Boolean.FALSE,
-                        Boolean.FALSE,
-                        Boolean.FALSE);
-            }
-        }
     }
 
     private String normalizeVideoLink(String rawValue) {
