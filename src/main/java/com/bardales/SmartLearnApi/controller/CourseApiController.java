@@ -45,10 +45,14 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @RestController
 @RequestMapping("/api/v1/courses")
 public class CourseApiController {
+
+    private static final Logger log = LoggerFactory.getLogger(CourseApiController.class);
 
     private final CourseService courseService;
 
@@ -345,6 +349,8 @@ public class CourseApiController {
             @PathVariable Long sessionId,
             @PathVariable Long contentId,
             @Valid @RequestBody CourseSessionContentPracticeStartRequest request) {
+        log.info("COURSE_EXAM_PRACTICE_START courseId={} sessionId={} contentId={} userId={}",
+            courseId, sessionId, contentId, request.userId());
         return courseService.startCourseSessionContentExamPracticeAttempt(courseId, sessionId, contentId, request.userId());
     }
 
@@ -354,6 +360,8 @@ public class CourseApiController {
             @PathVariable Long sessionId,
             @PathVariable Long contentId,
             @Valid @RequestBody ExamGroupJoinRequest request) {
+        log.info("COURSE_EXAM_GROUP_JOIN courseId={} sessionId={} contentId={} userId={}",
+            courseId, sessionId, contentId, request.userId());
         return courseService.joinCourseSessionContentGroupPractice(courseId, sessionId, contentId, request);
     }
 
@@ -363,6 +371,8 @@ public class CourseApiController {
             @PathVariable Long sessionId,
             @PathVariable Long contentId,
             @Valid @RequestBody ExamGroupJoinRequest request) {
+        log.info("COURSE_EXAM_GROUP_CREATE courseId={} sessionId={} contentId={} userId={}",
+            courseId, sessionId, contentId, request.userId());
         return courseService.createCourseSessionContentGroupPractice(courseId, sessionId, contentId, request);
     }
 
