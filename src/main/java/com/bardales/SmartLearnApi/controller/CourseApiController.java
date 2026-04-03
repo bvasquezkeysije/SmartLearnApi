@@ -17,8 +17,24 @@ import com.bardales.SmartLearnApi.dto.course.CourseSetExamsRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseUpdateRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseWeekContentReorderRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseWeekSaveRequest;
+import com.bardales.SmartLearnApi.dto.exam.ExamGroupAdvanceRequest;
+import com.bardales.SmartLearnApi.dto.exam.ExamGroupAnswerRequest;
+import com.bardales.SmartLearnApi.dto.exam.ExamGroupJoinRequest;
+import com.bardales.SmartLearnApi.dto.exam.ExamGroupStartRequest;
+import com.bardales.SmartLearnApi.dto.exam.ExamGroupStateResponse;
+import com.bardales.SmartLearnApi.dto.exam.ExamParticipantResponse;
+import com.bardales.SmartLearnApi.dto.exam.ExamPracticeSettingsRequest;
+import com.bardales.SmartLearnApi.dto.exam.ExamPracticeSettingsResponse;
+import com.bardales.SmartLearnApi.dto.exam.ExamPracticeStartResponse;
+import com.bardales.SmartLearnApi.dto.exam.ExamRenameRequest;
+import com.bardales.SmartLearnApi.dto.exam.ExamIndividualPracticeSettingsRequest;
+import com.bardales.SmartLearnApi.dto.exam.ExamParticipantPermissionUpdateRequest;
+import com.bardales.SmartLearnApi.dto.exam.ExamSummaryResponse;
+import com.bardales.SmartLearnApi.dto.exam.ManualQuestionUpsertRequest;
+import com.bardales.SmartLearnApi.dto.exam.QuestionResponse;
 import com.bardales.SmartLearnApi.service.CourseService;
 import jakarta.validation.Valid;
+import java.util.List;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -208,6 +224,201 @@ public class CourseApiController {
             @PathVariable Long contentId,
             @Valid @RequestBody CourseSessionContentPracticeStartRequest request) {
         return courseService.startCourseSessionContentPractice(courseId, sessionId, contentId, request.userId());
+    }
+
+    @GetMapping("/{courseId}/sessions/{sessionId}/contents/{contentId}/exam-summary")
+    public ExamSummaryResponse getSessionContentExamSummary(
+            @PathVariable Long courseId,
+            @PathVariable Long sessionId,
+            @PathVariable Long contentId,
+            @RequestParam Long userId) {
+        return courseService.getCourseSessionContentExamSummary(courseId, sessionId, contentId, userId);
+    }
+
+    @PatchMapping("/{courseId}/sessions/{sessionId}/contents/{contentId}/exam/name")
+    public ExamSummaryResponse renameSessionContentExam(
+            @PathVariable Long courseId,
+            @PathVariable Long sessionId,
+            @PathVariable Long contentId,
+            @Valid @RequestBody ExamRenameRequest request) {
+        return courseService.renameCourseSessionContentExam(courseId, sessionId, contentId, request);
+    }
+
+    @DeleteMapping("/{courseId}/sessions/{sessionId}/contents/{contentId}/exam")
+    public void deleteSessionContentExam(
+            @PathVariable Long courseId,
+            @PathVariable Long sessionId,
+            @PathVariable Long contentId,
+            @RequestParam Long userId) {
+        courseService.deleteCourseSessionContentExam(courseId, sessionId, contentId, userId);
+    }
+
+    @GetMapping("/{courseId}/sessions/{sessionId}/contents/{contentId}/exam-questions")
+    public List<QuestionResponse> getSessionContentExamQuestions(
+            @PathVariable Long courseId,
+            @PathVariable Long sessionId,
+            @PathVariable Long contentId,
+            @RequestParam Long userId) {
+        return courseService.getCourseSessionContentExamQuestions(courseId, sessionId, contentId, userId);
+    }
+
+    @PostMapping("/{courseId}/sessions/{sessionId}/contents/{contentId}/exam-questions")
+    public QuestionResponse addSessionContentExamQuestion(
+            @PathVariable Long courseId,
+            @PathVariable Long sessionId,
+            @PathVariable Long contentId,
+            @Valid @RequestBody ManualQuestionUpsertRequest request) {
+        return courseService.addCourseSessionContentExamQuestion(courseId, sessionId, contentId, request);
+    }
+
+    @PatchMapping("/{courseId}/sessions/{sessionId}/contents/{contentId}/exam-questions/{questionId}")
+    public QuestionResponse updateSessionContentExamQuestion(
+            @PathVariable Long courseId,
+            @PathVariable Long sessionId,
+            @PathVariable Long contentId,
+            @PathVariable Long questionId,
+            @Valid @RequestBody ManualQuestionUpsertRequest request) {
+        return courseService.updateCourseSessionContentExamQuestion(courseId, sessionId, contentId, questionId, request);
+    }
+
+    @GetMapping("/{courseId}/sessions/{sessionId}/contents/{contentId}/exam-participants")
+    public List<ExamParticipantResponse> getSessionContentExamParticipants(
+            @PathVariable Long courseId,
+            @PathVariable Long sessionId,
+            @PathVariable Long contentId,
+            @RequestParam Long userId) {
+        return courseService.getCourseSessionContentExamParticipants(courseId, sessionId, contentId, userId);
+    }
+
+    @PatchMapping("/{courseId}/sessions/{sessionId}/contents/{contentId}/exam-participants/{participantUserId}")
+    public void updateSessionContentExamParticipantPermissions(
+            @PathVariable Long courseId,
+            @PathVariable Long sessionId,
+            @PathVariable Long contentId,
+            @PathVariable Long participantUserId,
+            @Valid @RequestBody ExamParticipantPermissionUpdateRequest request) {
+        courseService.updateCourseSessionContentExamParticipantPermissions(
+                courseId, sessionId, contentId, participantUserId, request);
+    }
+
+    @DeleteMapping("/{courseId}/sessions/{sessionId}/contents/{contentId}/exam-participants/{participantUserId}")
+    public void removeSessionContentExamParticipant(
+            @PathVariable Long courseId,
+            @PathVariable Long sessionId,
+            @PathVariable Long contentId,
+            @PathVariable Long participantUserId,
+            @RequestParam Long requesterUserId) {
+        courseService.removeCourseSessionContentExamParticipant(
+                courseId, sessionId, contentId, participantUserId, requesterUserId);
+    }
+
+    @GetMapping("/{courseId}/sessions/{sessionId}/contents/{contentId}/exam-practice/settings/individual")
+    public ExamPracticeSettingsResponse getSessionContentIndividualPracticeSettings(
+            @PathVariable Long courseId,
+            @PathVariable Long sessionId,
+            @PathVariable Long contentId,
+            @RequestParam Long userId) {
+        return courseService.getCourseSessionContentIndividualPracticeSettings(courseId, sessionId, contentId, userId);
+    }
+
+    @PatchMapping("/{courseId}/sessions/{sessionId}/contents/{contentId}/exam-practice/settings/individual")
+    public ExamPracticeSettingsResponse updateSessionContentIndividualPracticeSettings(
+            @PathVariable Long courseId,
+            @PathVariable Long sessionId,
+            @PathVariable Long contentId,
+            @Valid @RequestBody ExamIndividualPracticeSettingsRequest request) {
+        return courseService.updateCourseSessionContentIndividualPracticeSettings(courseId, sessionId, contentId, request);
+    }
+
+    @PatchMapping("/{courseId}/sessions/{sessionId}/contents/{contentId}/exam-practice/settings")
+    public ExamSummaryResponse updateSessionContentPracticeSettings(
+            @PathVariable Long courseId,
+            @PathVariable Long sessionId,
+            @PathVariable Long contentId,
+            @Valid @RequestBody ExamPracticeSettingsRequest request) {
+        return courseService.updateCourseSessionContentPracticeSettings(courseId, sessionId, contentId, request);
+    }
+
+    @PostMapping("/{courseId}/sessions/{sessionId}/contents/{contentId}/exam-practice/start")
+    public ExamPracticeStartResponse startSessionContentExamPracticeAttempt(
+            @PathVariable Long courseId,
+            @PathVariable Long sessionId,
+            @PathVariable Long contentId,
+            @Valid @RequestBody CourseSessionContentPracticeStartRequest request) {
+        return courseService.startCourseSessionContentExamPracticeAttempt(courseId, sessionId, contentId, request.userId());
+    }
+
+    @PostMapping("/{courseId}/sessions/{sessionId}/contents/{contentId}/exam-practice/group/join")
+    public ExamGroupStateResponse joinSessionContentGroupPractice(
+            @PathVariable Long courseId,
+            @PathVariable Long sessionId,
+            @PathVariable Long contentId,
+            @Valid @RequestBody ExamGroupJoinRequest request) {
+        return courseService.joinCourseSessionContentGroupPractice(courseId, sessionId, contentId, request);
+    }
+
+    @PostMapping("/{courseId}/sessions/{sessionId}/contents/{contentId}/exam-practice/group/create")
+    public ExamGroupStateResponse createSessionContentGroupPractice(
+            @PathVariable Long courseId,
+            @PathVariable Long sessionId,
+            @PathVariable Long contentId,
+            @Valid @RequestBody ExamGroupJoinRequest request) {
+        return courseService.createCourseSessionContentGroupPractice(courseId, sessionId, contentId, request);
+    }
+
+    @PostMapping("/{courseId}/sessions/{sessionId}/contents/{contentId}/exam-practice/group/start")
+    public ExamGroupStateResponse startSessionContentGroupPractice(
+            @PathVariable Long courseId,
+            @PathVariable Long sessionId,
+            @PathVariable Long contentId,
+            @Valid @RequestBody ExamGroupStartRequest request) {
+        return courseService.startCourseSessionContentGroupPractice(courseId, sessionId, contentId, request);
+    }
+
+    @GetMapping("/{courseId}/sessions/{sessionId}/contents/{contentId}/exam-practice/group/state")
+    public ExamGroupStateResponse getSessionContentGroupPracticeState(
+            @PathVariable Long courseId,
+            @PathVariable Long sessionId,
+            @PathVariable Long contentId,
+            @RequestParam Long userId,
+            @RequestParam Long sessionGroupId) {
+        return courseService.getCourseSessionContentGroupPracticeState(courseId, sessionId, contentId, sessionGroupId, userId);
+    }
+
+    @PostMapping("/{courseId}/sessions/{sessionId}/contents/{contentId}/exam-practice/group/answer")
+    public ExamGroupStateResponse answerSessionContentGroupPractice(
+            @PathVariable Long courseId,
+            @PathVariable Long sessionId,
+            @PathVariable Long contentId,
+            @Valid @RequestBody ExamGroupAnswerRequest request) {
+        return courseService.answerCourseSessionContentGroupPractice(courseId, sessionId, contentId, request);
+    }
+
+    @PostMapping("/{courseId}/sessions/{sessionId}/contents/{contentId}/exam-practice/group/next")
+    public ExamGroupStateResponse nextSessionContentGroupPractice(
+            @PathVariable Long courseId,
+            @PathVariable Long sessionId,
+            @PathVariable Long contentId,
+            @Valid @RequestBody ExamGroupAdvanceRequest request) {
+        return courseService.nextCourseSessionContentGroupPractice(courseId, sessionId, contentId, request);
+    }
+
+    @PostMapping("/{courseId}/sessions/{sessionId}/contents/{contentId}/exam-practice/group/close")
+    public ExamGroupStateResponse closeSessionContentGroupPractice(
+            @PathVariable Long courseId,
+            @PathVariable Long sessionId,
+            @PathVariable Long contentId,
+            @Valid @RequestBody ExamGroupAdvanceRequest request) {
+        return courseService.closeCourseSessionContentGroupPractice(courseId, sessionId, contentId, request);
+    }
+
+    @PostMapping("/{courseId}/sessions/{sessionId}/contents/{contentId}/exam-practice/group/restart")
+    public ExamGroupStateResponse restartSessionContentGroupPractice(
+            @PathVariable Long courseId,
+            @PathVariable Long sessionId,
+            @PathVariable Long contentId,
+            @Valid @RequestBody ExamGroupAdvanceRequest request) {
+        return courseService.restartCourseSessionContentGroupPractice(courseId, sessionId, contentId, request);
     }
 
     @PatchMapping("/{courseId}")

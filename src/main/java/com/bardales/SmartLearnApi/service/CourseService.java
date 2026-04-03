@@ -42,6 +42,21 @@ import com.bardales.SmartLearnApi.dto.course.CourseWeekItemResponse;
 import com.bardales.SmartLearnApi.dto.course.CourseWeekSaveRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseSetExamsRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseUpdateRequest;
+import com.bardales.SmartLearnApi.dto.exam.ExamParticipantResponse;
+import com.bardales.SmartLearnApi.dto.exam.ExamParticipantPermissionUpdateRequest;
+import com.bardales.SmartLearnApi.dto.exam.ExamGroupAdvanceRequest;
+import com.bardales.SmartLearnApi.dto.exam.ExamGroupAnswerRequest;
+import com.bardales.SmartLearnApi.dto.exam.ExamGroupJoinRequest;
+import com.bardales.SmartLearnApi.dto.exam.ExamGroupStartRequest;
+import com.bardales.SmartLearnApi.dto.exam.ExamGroupStateResponse;
+import com.bardales.SmartLearnApi.dto.exam.ExamIndividualPracticeSettingsRequest;
+import com.bardales.SmartLearnApi.dto.exam.ExamPracticeSettingsRequest;
+import com.bardales.SmartLearnApi.dto.exam.ExamPracticeSettingsResponse;
+import com.bardales.SmartLearnApi.dto.exam.ExamPracticeStartResponse;
+import com.bardales.SmartLearnApi.dto.exam.ExamRenameRequest;
+import com.bardales.SmartLearnApi.dto.exam.ExamSummaryResponse;
+import com.bardales.SmartLearnApi.dto.exam.QuestionResponse;
+import com.bardales.SmartLearnApi.dto.exam.ManualQuestionUpsertRequest;
 import com.bardales.SmartLearnApi.exception.BadRequestException;
 import com.bardales.SmartLearnApi.exception.NotFoundException;
 import java.time.LocalDateTime;
@@ -69,6 +84,7 @@ public class CourseService {
     private final ExamRepository examRepository;
     private final UserRepository userRepository;
     private final ExamService examService;
+    private final ExamGroupPracticeService examGroupPracticeService;
 
     public CourseService(
             CourseRepository courseRepository,
@@ -81,7 +97,8 @@ public class CourseService {
             ExamAttemptRepository examAttemptRepository,
             ExamRepository examRepository,
             UserRepository userRepository,
-            ExamService examService) {
+            ExamService examService,
+            ExamGroupPracticeService examGroupPracticeService) {
         this.courseRepository = courseRepository;
         this.courseMembershipRepository = courseMembershipRepository;
         this.courseExamRepository = courseExamRepository;
@@ -93,6 +110,7 @@ public class CourseService {
         this.examRepository = examRepository;
         this.userRepository = userRepository;
         this.examService = examService;
+        this.examGroupPracticeService = examGroupPracticeService;
     }
 
     @Transactional(readOnly = true)
@@ -130,9 +148,11 @@ public class CourseService {
             coursesById.putIfAbsent(publicCourse.getId(), publicCourse);
         }
 
+        ensureRequesterExamMembershipsForCourses(coursesById.values(), userId);
+
         List<CourseResponse> courses = coursesById.values().stream().map(this::toCourseResponse).toList();
 
-        List<CourseExamItemResponse> availableExams = examRepository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId)
+        List<CourseExamItemResponse> availableExams = examService.listExams(userId)
                 .stream()
                 .map(this::toExamItem)
                 .toList();
@@ -585,54 +605,166 @@ public class CourseService {
     @Transactional
     public CourseSessionContentPracticeStartResponse startCourseSessionContentPractice(
             Long courseId, Long sessionId, Long contentId, Long userId) {
-        requireUser(userId);
-
-        CourseSession session = courseSessionRepository
-                .findById(sessionId)
-                .orElseThrow(() -> new NotFoundException("Sesion no encontrada"));
-        if (session.getDeletedAt() != null) {
-            throw new NotFoundException("Sesion no encontrada");
-        }
-        Course course = session.getCourse();
-        if (course == null || course.getDeletedAt() != null || !course.getId().equals(courseId)) {
-            throw new NotFoundException("Curso no encontrado");
-        }
-        if (!hasCourseAccess(course, userId)) {
-            throw new NotFoundException("Curso no encontrado");
-        }
-
-        CourseSessionContent content = courseSessionContentRepository
-                .findByIdAndCourseSessionIdAndDeletedAtIsNull(contentId, session.getId())
-                .orElseThrow(() -> new NotFoundException("Contenido de sesion no encontrado"));
-
-        String contentType = trimOrNull(content.getType());
-        if (contentType == null || !contentType.equals("exam")) {
-            throw new BadRequestException("Este contenido no corresponde a un examen");
-        }
-
-        Exam sourceExam = content.getSourceExam();
-        if (sourceExam == null || sourceExam.getDeletedAt() != null) {
-            throw new BadRequestException("Este contenido no tiene un examen asociado");
-        }
-
-        Long ownerUserId = course.getUser() == null ? null : course.getUser().getId();
-        boolean isOwner = ownerUserId != null && ownerUserId.equals(userId);
-        if (!isOwner) {
-            User participant = requireUser(userId);
-            examService.upsertExamMembership(
-                    sourceExam,
-                    participant,
-                    "viewer",
-                    Boolean.FALSE,
-                    Boolean.FALSE,
-                    Boolean.FALSE);
-        }
+        Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, userId);
 
         String examName = trimOrNull(sourceExam.getName());
         if (examName == null) {
             examName = "examen";
         }
         return new CourseSessionContentPracticeStartResponse(sourceExam.getId(), examName);
+    }
+
+    @Transactional
+    public ExamSummaryResponse getCourseSessionContentExamSummary(
+            Long courseId, Long sessionId, Long contentId, Long userId) {
+        Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, userId);
+        return examService.getExamSummary(sourceExam.getId(), userId);
+    }
+
+    @Transactional
+    public ExamSummaryResponse renameCourseSessionContentExam(
+            Long courseId, Long sessionId, Long contentId, ExamRenameRequest request) {
+        Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, request.userId());
+        return examService.renameExam(sourceExam.getId(), request);
+    }
+
+    @Transactional
+    public void deleteCourseSessionContentExam(Long courseId, Long sessionId, Long contentId, Long userId) {
+        Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, userId);
+        examService.deleteExam(sourceExam.getId(), userId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<QuestionResponse> getCourseSessionContentExamQuestions(
+            Long courseId, Long sessionId, Long contentId, Long userId) {
+        Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, userId);
+        return examService.getManualExam(sourceExam.getId(), userId);
+    }
+
+    @Transactional
+    public QuestionResponse addCourseSessionContentExamQuestion(
+            Long courseId, Long sessionId, Long contentId, ManualQuestionUpsertRequest request) {
+        Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, request.userId());
+        return examService.addManualQuestion(sourceExam.getId(), request);
+    }
+
+    @Transactional
+    public QuestionResponse updateCourseSessionContentExamQuestion(
+            Long courseId, Long sessionId, Long contentId, Long questionId, ManualQuestionUpsertRequest request) {
+        Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, request.userId());
+        return examService.updateManualQuestion(sourceExam.getId(), questionId, request);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ExamParticipantResponse> getCourseSessionContentExamParticipants(
+            Long courseId, Long sessionId, Long contentId, Long userId) {
+        Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, userId);
+        return examService.listParticipants(sourceExam.getId(), userId);
+    }
+
+    @Transactional
+    public void updateCourseSessionContentExamParticipantPermissions(
+            Long courseId,
+            Long sessionId,
+            Long contentId,
+            Long participantUserId,
+            ExamParticipantPermissionUpdateRequest request) {
+        Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, request.requesterUserId());
+        examService.updateExamParticipantPermissions(sourceExam.getId(), participantUserId, request);
+    }
+
+    @Transactional
+    public void removeCourseSessionContentExamParticipant(
+            Long courseId, Long sessionId, Long contentId, Long participantUserId, Long requesterUserId) {
+        Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, requesterUserId);
+        examService.removeExamParticipant(sourceExam.getId(), participantUserId, requesterUserId);
+    }
+
+    @Transactional(readOnly = true)
+    public ExamPracticeSettingsResponse getCourseSessionContentIndividualPracticeSettings(
+            Long courseId, Long sessionId, Long contentId, Long userId) {
+        Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, userId);
+        return examService.getIndividualPracticeSettings(sourceExam.getId(), userId);
+    }
+
+    @Transactional
+    public ExamPracticeSettingsResponse updateCourseSessionContentIndividualPracticeSettings(
+            Long courseId,
+            Long sessionId,
+            Long contentId,
+            ExamIndividualPracticeSettingsRequest request) {
+        Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, request.userId());
+        return examService.updateIndividualPracticeSettings(sourceExam.getId(), request);
+    }
+
+    @Transactional
+    public ExamSummaryResponse updateCourseSessionContentPracticeSettings(
+            Long courseId, Long sessionId, Long contentId, ExamPracticeSettingsRequest request) {
+        Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, request.userId());
+        return examService.updatePracticeSettings(sourceExam.getId(), request);
+    }
+
+    @Transactional
+    public ExamPracticeStartResponse startCourseSessionContentExamPracticeAttempt(
+            Long courseId, Long sessionId, Long contentId, Long userId) {
+        Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, userId);
+        return examService.startPracticeAttempt(sourceExam.getId(), userId);
+    }
+
+    @Transactional
+    public ExamGroupStateResponse joinCourseSessionContentGroupPractice(
+            Long courseId, Long sessionId, Long contentId, ExamGroupJoinRequest request) {
+        Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, request.userId());
+        return examGroupPracticeService.join(sourceExam.getId(), request);
+    }
+
+    @Transactional
+    public ExamGroupStateResponse createCourseSessionContentGroupPractice(
+            Long courseId, Long sessionId, Long contentId, ExamGroupJoinRequest request) {
+        Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, request.userId());
+        return examGroupPracticeService.create(sourceExam.getId(), request);
+    }
+
+    @Transactional
+    public ExamGroupStateResponse startCourseSessionContentGroupPractice(
+            Long courseId, Long sessionId, Long contentId, ExamGroupStartRequest request) {
+        Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, request.userId());
+        return examGroupPracticeService.start(sourceExam.getId(), request);
+    }
+
+    @Transactional(readOnly = true)
+    public ExamGroupStateResponse getCourseSessionContentGroupPracticeState(
+            Long courseId, Long sessionId, Long contentId, Long sessionGroupId, Long userId) {
+        Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, userId);
+        return examGroupPracticeService.state(sourceExam.getId(), sessionGroupId, userId);
+    }
+
+    @Transactional
+    public ExamGroupStateResponse answerCourseSessionContentGroupPractice(
+            Long courseId, Long sessionId, Long contentId, ExamGroupAnswerRequest request) {
+        Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, request.userId());
+        return examGroupPracticeService.answer(sourceExam.getId(), request);
+    }
+
+    @Transactional
+    public ExamGroupStateResponse nextCourseSessionContentGroupPractice(
+            Long courseId, Long sessionId, Long contentId, ExamGroupAdvanceRequest request) {
+        Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, request.userId());
+        return examGroupPracticeService.next(sourceExam.getId(), request);
+    }
+
+    @Transactional
+    public ExamGroupStateResponse closeCourseSessionContentGroupPractice(
+            Long courseId, Long sessionId, Long contentId, ExamGroupAdvanceRequest request) {
+        Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, request.userId());
+        return examGroupPracticeService.close(sourceExam.getId(), request);
+    }
+
+    @Transactional
+    public ExamGroupStateResponse restartCourseSessionContentGroupPractice(
+            Long courseId, Long sessionId, Long contentId, ExamGroupAdvanceRequest request) {
+        Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, request.userId());
+        return examGroupPracticeService.restart(sourceExam.getId(), request);
     }
 
     @Transactional
@@ -1355,7 +1487,137 @@ public class CourseService {
         if (examName.isEmpty()) {
             examName = "examen";
         }
-        return new CourseExamItemResponse(exam.getId(), examName, exam.getQuestionsCount());
+        return new CourseExamItemResponse(
+                exam.getId(),
+                examName,
+                exam.getQuestionsCount(),
+                trimOrNull(exam.getCode()),
+                exam.getUser() == null ? null : exam.getUser().getId(),
+                "public".equalsIgnoreCase(trimOrNull(exam.getVisibility())) ? "public" : "private",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                exam.getCreatedAt());
+    }
+
+    private CourseExamItemResponse toExamItem(ExamSummaryResponse exam) {
+        return new CourseExamItemResponse(
+                exam.id(),
+                trimOrNull(exam.name()),
+                exam.questionsCount(),
+                trimOrNull(exam.code()),
+                exam.ownerUserId(),
+                trimOrNull(exam.visibility()),
+                trimOrNull(exam.accessRole()),
+                exam.canEditQuestions(),
+                exam.canEditSettings(),
+                exam.canShare(),
+                exam.canStartGroup(),
+                exam.canRenameExam(),
+                exam.participantsCount(),
+                exam.personalPracticeCount(),
+                exam.groupPracticeCount(),
+                exam.attemptsCount(),
+                exam.groupPracticeSessionId(),
+                trimOrNull(exam.groupPracticeStatus()),
+                exam.groupPracticeCreatedByUserId(),
+                exam.createdAt());
+    }
+
+    private Exam requireCourseSessionContentExam(Long courseId, Long sessionId, Long contentId, Long userId) {
+        User requester = requireUser(userId);
+
+        CourseSession session = courseSessionRepository
+                .findById(sessionId)
+                .orElseThrow(() -> new NotFoundException("Sesion no encontrada"));
+        if (session.getDeletedAt() != null) {
+            throw new NotFoundException("Sesion no encontrada");
+        }
+        Course course = session.getCourse();
+        if (course == null || course.getDeletedAt() != null || !course.getId().equals(courseId)) {
+            throw new NotFoundException("Curso no encontrado");
+        }
+        if (!hasCourseAccess(course, userId)) {
+            throw new NotFoundException("Curso no encontrado");
+        }
+
+        CourseSessionContent content = courseSessionContentRepository
+                .findByIdAndCourseSessionIdAndDeletedAtIsNull(contentId, session.getId())
+                .orElseThrow(() -> new NotFoundException("Contenido de sesion no encontrado"));
+
+        String contentType = trimOrNull(content.getType());
+        if (contentType == null || !contentType.equalsIgnoreCase("exam")) {
+            throw new BadRequestException("Este contenido no corresponde a un examen");
+        }
+
+        Exam sourceExam = content.getSourceExam();
+        if (sourceExam == null || sourceExam.getDeletedAt() != null) {
+            throw new BadRequestException("Este contenido no tiene un examen asociado");
+        }
+
+        Long ownerUserId = course.getUser() == null ? null : course.getUser().getId();
+        boolean isOwner = ownerUserId != null && ownerUserId.equals(userId);
+        if (!isOwner) {
+            examService.upsertExamMembership(
+                    sourceExam,
+                    requester,
+                    "viewer",
+                    Boolean.FALSE,
+                    Boolean.FALSE,
+                    Boolean.FALSE);
+        }
+        return sourceExam;
+    }
+
+    private void ensureRequesterExamMembershipsForCourses(Iterable<Course> courses, Long userId) {
+        if (userId == null) {
+            return;
+        }
+        User requester = null;
+        for (Course course : courses) {
+            if (course == null || course.getId() == null || !hasCourseAccess(course, userId)) {
+                continue;
+            }
+            Long ownerUserId = course.getUser() == null ? null : course.getUser().getId();
+            if (ownerUserId != null && ownerUserId.equals(userId)) {
+                continue;
+            }
+            List<CourseSessionContent> contents = courseSessionContentRepository
+                    .findByCourseSessionCourseIdAndDeletedAtIsNullOrderByContentOrderAscCreatedAtAsc(course.getId());
+            for (CourseSessionContent content : contents) {
+                if (content == null || content.getDeletedAt() != null) {
+                    continue;
+                }
+                String contentType = trimOrNull(content.getType());
+                if (contentType == null || !contentType.equalsIgnoreCase("exam")) {
+                    continue;
+                }
+                Exam sourceExam = content.getSourceExam();
+                if (sourceExam == null || sourceExam.getDeletedAt() != null) {
+                    continue;
+                }
+                if (requester == null) {
+                    requester = requireUser(userId);
+                }
+                examService.upsertExamMembership(
+                        sourceExam,
+                        requester,
+                        "viewer",
+                        Boolean.FALSE,
+                        Boolean.FALSE,
+                        Boolean.FALSE);
+            }
+        }
     }
 
     private String normalizeVideoLink(String rawValue) {

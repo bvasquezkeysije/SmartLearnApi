@@ -3,8 +3,14 @@ package com.bardales.SmartLearnApi.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.bardales.SmartLearnApi.domain.entity.Course;
@@ -30,6 +36,10 @@ import com.bardales.SmartLearnApi.dto.course.CourseCompetencySaveRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseModuleResponse;
 import com.bardales.SmartLearnApi.dto.course.CourseParticipantSaveRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseResponse;
+import com.bardales.SmartLearnApi.dto.course.CourseSessionContentPracticeStartResponse;
+import com.bardales.SmartLearnApi.dto.exam.ExamRenameRequest;
+import com.bardales.SmartLearnApi.dto.exam.ExamSummaryResponse;
+import com.bardales.SmartLearnApi.exception.BadRequestException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -76,6 +86,9 @@ class CourseServiceTest {
     @Mock
     private ExamService examService;
 
+    @Mock
+    private ExamGroupPracticeService examGroupPracticeService;
+
     private CourseService courseService;
 
     @BeforeEach
@@ -91,7 +104,8 @@ class CourseServiceTest {
                 examAttemptRepository,
                 examRepository,
                 userRepository,
-                examService);
+                examService,
+                examGroupPracticeService);
     }
 
     @Test
@@ -160,13 +174,11 @@ class CourseServiceTest {
         attempt.setFinishedAt(LocalDateTime.now().minusMinutes(2));
         setBaseFields(attempt, 17L);
 
-        when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
+        lenient().when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
         when(courseRepository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(1L)).thenReturn(List.of(course));
         when(courseMembershipRepository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(1L)).thenReturn(List.of());
         when(courseRepository.findByVisibilityIgnoreCaseAndDeletedAtIsNullOrderByCreatedAtDesc("public"))
                 .thenReturn(List.of());
-        when(examRepository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(1L)).thenReturn(List.of());
-
         when(courseSessionRepository.findByCourseIdAndDeletedAtIsNullOrderByCreatedAtDesc(10L)).thenReturn(List.of(session));
         when(courseWeekRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(12L))
                 .thenReturn(List.of());
@@ -225,7 +237,7 @@ class CourseServiceTest {
         softDeletedMembership.setDeletedAt(LocalDateTime.now().minusDays(1));
         setBaseFields(softDeletedMembership, 21L);
 
-        when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
+        lenient().when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
         when(courseRepository.findByIdAndUserIdAndDeletedAtIsNull(20L, 1L)).thenReturn(Optional.of(course));
         when(userRepository.findByEmailIgnoreCaseOrUsernameIgnoreCase("student", "student"))
                 .thenReturn(Optional.of(participant));
@@ -292,6 +304,191 @@ class CourseServiceTest {
         assertEquals("Analisis", response.competencies().getFirst().name());
         assertEquals("avanzado", response.competencies().getFirst().level());
     }
+
+    @Test
+    void getCourseSessionContentExamSummaryReturnsExamServiceSummary() {
+        AnchoredExamFixture fixture = buildAnchoredExamFixture(100L, "exam");
+
+        when(examService.getExamSummary(400L, 1L))
+                .thenReturn(new ExamSummaryResponse(
+                        400L,
+                        "Examen anclado",
+                        "EXM-400",
+                        null,
+                        6,
+                        2L,
+                        1L,
+                        0L,
+                        true,
+                        "sequential",
+                        false,
+                        1L,
+                        "private",
+                        "owner",
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        3L,
+                        null,
+                        null,
+                        null,
+                        LocalDateTime.now()));
+
+        ExamSummaryResponse response =
+                courseService.getCourseSessionContentExamSummary(200L, 300L, 500L, 1L);
+
+        assertEquals(400L, response.id());
+        assertEquals("Examen anclado", response.name());
+        verify(examService).getExamSummary(400L, 1L);
+        verify(examService, never()).upsertExamMembership(
+                any(Exam.class), any(User.class), any(String.class), any(Boolean.class), any(Boolean.class), any(Boolean.class));
+        assertNotNull(fixture.course);
+    }
+
+    @Test
+    void renameCourseSessionContentExamDelegatesToExamServiceWithSourceExamId() {
+        buildAnchoredExamFixture(110L, "exam");
+        ExamRenameRequest request = new ExamRenameRequest(1L, "Nuevo nombre");
+
+        when(examService.renameExam(eq(410L), eq(request)))
+                .thenReturn(new ExamSummaryResponse(
+                        410L,
+                        "Nuevo nombre",
+                        "EXM-410",
+                        null,
+                        10,
+                        0L,
+                        0L,
+                        0L,
+                        true,
+                        "sequential",
+                        false,
+                        1L,
+                        "private",
+                        "owner",
+                        true,
+                        true,
+                        true,
+                        true,
+                        true,
+                        1L,
+                        null,
+                        null,
+                        null,
+                        LocalDateTime.now()));
+
+        ExamSummaryResponse updated =
+                courseService.renameCourseSessionContentExam(210L, 310L, 510L, request);
+
+        assertEquals("Nuevo nombre", updated.name());
+        verify(examService).renameExam(410L, request);
+    }
+
+    @Test
+    void deleteCourseSessionContentExamDelegatesToExamServiceWithSourceExamId() {
+        buildAnchoredExamFixture(120L, "exam");
+
+        courseService.deleteCourseSessionContentExam(220L, 320L, 520L, 1L);
+
+        verify(examService).deleteExam(420L, 1L);
+    }
+
+    @Test
+    void renameCourseSessionContentExamFailsWhenContentIsNotExam() {
+        buildAnchoredExamFixture(130L, "video");
+        ExamRenameRequest request = new ExamRenameRequest(1L, "No aplica");
+
+        assertThrows(
+                BadRequestException.class,
+                () -> courseService.renameCourseSessionContentExam(230L, 330L, 530L, request));
+        verify(examService, never()).renameExam(any(Long.class), any(ExamRenameRequest.class));
+    }
+
+    @Test
+    void startCourseSessionContentPracticeForOwnerDoesNotUpsertMembership() {
+        buildAnchoredExamFixture(140L, "exam");
+
+        CourseSessionContentPracticeStartResponse response =
+                courseService.startCourseSessionContentPractice(240L, 340L, 540L, 1L);
+
+        assertEquals(440L, response.examId());
+        assertEquals("Examen anclado", response.examName());
+        verify(examService, never()).upsertExamMembership(
+                any(Exam.class), any(User.class), any(String.class), any(Boolean.class), any(Boolean.class), any(Boolean.class));
+    }
+
+    @Test
+    void startCourseSessionContentPracticeForParticipantUpsertsViewerMembership() {
+        AnchoredExamFixture fixture = buildAnchoredExamFixture(150L, "exam");
+        User participant = new User();
+        participant.setName("Participant");
+        participant.setUsername("participant");
+        participant.setEmail("participant@mail.com");
+        setBaseFields(participant, 2L);
+        CourseMembership membership = new CourseMembership();
+        membership.setCourse(fixture.course);
+        membership.setUser(participant);
+        membership.setRole("viewer");
+        setBaseFields(membership, 999L);
+
+        when(userRepository.findById(2L)).thenReturn(Optional.of(participant));
+        when(courseMembershipRepository.findByCourseIdAndUserIdAndDeletedAtIsNull(fixture.course.getId(), 2L))
+                .thenReturn(Optional.of(membership));
+
+        CourseSessionContentPracticeStartResponse response =
+                courseService.startCourseSessionContentPractice(250L, 350L, 550L, 2L);
+
+        assertEquals(450L, response.examId());
+        verify(examService, times(1)).upsertExamMembership(
+                eq(fixture.exam),
+                eq(participant),
+                eq("viewer"),
+                eq(Boolean.FALSE),
+                eq(Boolean.FALSE),
+                eq(Boolean.FALSE));
+    }
+
+    private AnchoredExamFixture buildAnchoredExamFixture(Long baseId, String contentType) {
+        User owner = new User();
+        owner.setName("Owner");
+        owner.setUsername("owner");
+        owner.setEmail("owner@mail.com");
+        setBaseFields(owner, 1L);
+
+        Course course = new Course();
+        course.setUser(owner);
+        course.setName("Curso anclado");
+        course.setVisibility("private");
+        setBaseFields(course, baseId + 100L);
+
+        CourseSession session = new CourseSession();
+        session.setCourse(course);
+        session.setName("Sesion anclada");
+        setBaseFields(session, baseId + 200L);
+
+        Exam exam = new Exam();
+        exam.setUser(owner);
+        exam.setName("Examen anclado");
+        exam.setQuestionsCount(10);
+        setBaseFields(exam, baseId + 300L);
+
+        CourseSessionContent content = new CourseSessionContent();
+        content.setCourseSession(session);
+        content.setType(contentType);
+        content.setSourceExam(exam);
+        setBaseFields(content, baseId + 400L);
+
+        lenient().when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
+        when(courseSessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+        when(courseSessionContentRepository.findByIdAndCourseSessionIdAndDeletedAtIsNull(content.getId(), session.getId()))
+                .thenReturn(Optional.of(content));
+
+        return new AnchoredExamFixture(course, session, exam, content);
+    }
+
+    private record AnchoredExamFixture(Course course, CourseSession session, Exam exam, CourseSessionContent content) {}
 
     private static void setBaseFields(Object target, Long id) {
         ReflectionTestUtils.setField(target, "id", id);
