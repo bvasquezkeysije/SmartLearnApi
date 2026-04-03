@@ -634,7 +634,7 @@ public class CourseService {
         examService.deleteExam(sourceExam.getId(), userId);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<QuestionResponse> getCourseSessionContentExamQuestions(
             Long courseId, Long sessionId, Long contentId, Long userId) {
         Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, userId);
@@ -655,7 +655,7 @@ public class CourseService {
         return examService.updateManualQuestion(sourceExam.getId(), questionId, request);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<ExamParticipantResponse> getCourseSessionContentExamParticipants(
             Long courseId, Long sessionId, Long contentId, Long userId) {
         Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, userId);
@@ -680,7 +680,7 @@ public class CourseService {
         examService.removeExamParticipant(sourceExam.getId(), participantUserId, requesterUserId);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public ExamPracticeSettingsResponse getCourseSessionContentIndividualPracticeSettings(
             Long courseId, Long sessionId, Long contentId, Long userId) {
         Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, userId);
@@ -732,7 +732,7 @@ public class CourseService {
         return examGroupPracticeService.start(sourceExam.getId(), request);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public ExamGroupStateResponse getCourseSessionContentGroupPracticeState(
             Long courseId, Long sessionId, Long contentId, Long sessionGroupId, Long userId) {
         Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, userId);

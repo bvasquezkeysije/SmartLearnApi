@@ -38,9 +38,13 @@ import com.bardales.SmartLearnApi.dto.course.CourseParticipantSaveRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseResponse;
 import com.bardales.SmartLearnApi.dto.course.CourseSessionContentPracticeStartResponse;
 import com.bardales.SmartLearnApi.dto.exam.ExamRenameRequest;
+import com.bardales.SmartLearnApi.dto.exam.ExamGroupJoinRequest;
+import com.bardales.SmartLearnApi.dto.exam.ExamGroupStateResponse;
+import com.bardales.SmartLearnApi.dto.exam.ExamPracticeStartResponse;
 import com.bardales.SmartLearnApi.dto.exam.ExamSummaryResponse;
 import com.bardales.SmartLearnApi.exception.BadRequestException;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -450,6 +454,87 @@ class CourseServiceTest {
                 eq(Boolean.FALSE));
     }
 
+    @Test
+    void startCourseSessionContentExamPracticeAttemptParticipantDelegatesWithoutReadOnlyFailure() {
+        AnchoredExamFixture fixture = buildAnchoredExamFixture(160L, "exam");
+        User participant = buildParticipantUser(2L);
+        CourseMembership membership = buildParticipantMembership(fixture.course, participant, "viewer", 1001L);
+        ExamPracticeStartResponse expected =
+                new ExamPracticeStartResponse(9001L, 5, "ordered", true, true, LocalDateTime.now());
+
+        when(userRepository.findById(2L)).thenReturn(Optional.of(participant));
+        when(courseMembershipRepository.findByCourseIdAndUserIdAndDeletedAtIsNull(fixture.course.getId(), 2L))
+                .thenReturn(Optional.of(membership));
+        when(examService.startPracticeAttempt(fixture.exam.getId(), 2L)).thenReturn(expected);
+
+        ExamPracticeStartResponse response =
+                courseService.startCourseSessionContentExamPracticeAttempt(260L, 360L, 560L, 2L);
+
+        assertEquals(9001L, response.attemptId());
+        verify(examService).upsertExamMembership(
+                eq(fixture.exam),
+                eq(participant),
+                eq("viewer"),
+                eq(Boolean.FALSE),
+                eq(Boolean.FALSE),
+                eq(Boolean.FALSE));
+        verify(examService).startPracticeAttempt(fixture.exam.getId(), 2L);
+    }
+
+    @Test
+    void joinCourseSessionContentGroupPracticeParticipantDelegatesWithoutReadOnlyFailure() {
+        AnchoredExamFixture fixture = buildAnchoredExamFixture(170L, "exam");
+        User participant = buildParticipantUser(2L);
+        CourseMembership membership = buildParticipantMembership(fixture.course, participant, "viewer", 1002L);
+        ExamGroupJoinRequest request = new ExamGroupJoinRequest(2L);
+        ExamGroupStateResponse expected = emptyGroupState(fixture.exam.getId(), fixture.exam.getName());
+
+        when(userRepository.findById(2L)).thenReturn(Optional.of(participant));
+        when(courseMembershipRepository.findByCourseIdAndUserIdAndDeletedAtIsNull(fixture.course.getId(), 2L))
+                .thenReturn(Optional.of(membership));
+        when(examGroupPracticeService.join(fixture.exam.getId(), request)).thenReturn(expected);
+
+        ExamGroupStateResponse response =
+                courseService.joinCourseSessionContentGroupPractice(270L, 370L, 570L, request);
+
+        assertEquals(fixture.exam.getId(), response.examId());
+        verify(examService).upsertExamMembership(
+                eq(fixture.exam),
+                eq(participant),
+                eq("viewer"),
+                eq(Boolean.FALSE),
+                eq(Boolean.FALSE),
+                eq(Boolean.FALSE));
+        verify(examGroupPracticeService).join(fixture.exam.getId(), request);
+    }
+
+    @Test
+    void createCourseSessionContentGroupPracticeParticipantDelegatesWithoutReadOnlyFailure() {
+        AnchoredExamFixture fixture = buildAnchoredExamFixture(180L, "exam");
+        User participant = buildParticipantUser(2L);
+        CourseMembership membership = buildParticipantMembership(fixture.course, participant, "viewer", 1003L);
+        ExamGroupJoinRequest request = new ExamGroupJoinRequest(2L);
+        ExamGroupStateResponse expected = emptyGroupState(fixture.exam.getId(), fixture.exam.getName());
+
+        when(userRepository.findById(2L)).thenReturn(Optional.of(participant));
+        when(courseMembershipRepository.findByCourseIdAndUserIdAndDeletedAtIsNull(fixture.course.getId(), 2L))
+                .thenReturn(Optional.of(membership));
+        when(examGroupPracticeService.create(fixture.exam.getId(), request)).thenReturn(expected);
+
+        ExamGroupStateResponse response =
+                courseService.createCourseSessionContentGroupPractice(280L, 380L, 580L, request);
+
+        assertEquals(fixture.exam.getId(), response.examId());
+        verify(examService).upsertExamMembership(
+                eq(fixture.exam),
+                eq(participant),
+                eq("viewer"),
+                eq(Boolean.FALSE),
+                eq(Boolean.FALSE),
+                eq(Boolean.FALSE));
+        verify(examGroupPracticeService).create(fixture.exam.getId(), request);
+    }
+
     private AnchoredExamFixture buildAnchoredExamFixture(Long baseId, String contentType) {
         User owner = new User();
         owner.setName("Owner");
@@ -487,6 +572,60 @@ class CourseServiceTest {
 
         return new AnchoredExamFixture(course, session, exam, content);
     }
+
+        private User buildParticipantUser(Long id) {
+                User participant = new User();
+                participant.setName("Participant");
+                participant.setUsername("participant");
+                participant.setEmail("participant@mail.com");
+                setBaseFields(participant, id);
+                return participant;
+        }
+
+        private CourseMembership buildParticipantMembership(
+                        Course course,
+                        User participant,
+                        String role,
+                        Long membershipId) {
+                CourseMembership membership = new CourseMembership();
+                membership.setCourse(course);
+                membership.setUser(participant);
+                membership.setRole(role);
+                setBaseFields(membership, membershipId);
+                return membership;
+        }
+
+        private ExamGroupStateResponse emptyGroupState(Long examId, String examName) {
+                return new ExamGroupStateResponse(
+                                1L,
+                                examId,
+                                examName,
+                                "waiting",
+                                0,
+                                0,
+                                Boolean.FALSE,
+                                Boolean.FALSE,
+                                null,
+                                Collections.emptyList(),
+                                Collections.emptyList(),
+                                Collections.emptyList(),
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                1,
+                                Boolean.FALSE,
+                                Boolean.FALSE,
+                                0,
+                                null,
+                                null,
+                                null);
+        }
 
     private record AnchoredExamFixture(Course course, CourseSession session, Exam exam, CourseSessionContent content) {}
 
