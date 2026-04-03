@@ -93,6 +93,9 @@ class CourseServiceTest {
     @Mock
     private ExamGroupPracticeService examGroupPracticeService;
 
+        @Mock
+        private CoursePracticeWriteService coursePracticeWriteService;
+
     private CourseService courseService;
 
     @BeforeEach
@@ -109,7 +112,8 @@ class CourseServiceTest {
                 examRepository,
                 userRepository,
                 examService,
-                examGroupPracticeService);
+                examGroupPracticeService,
+                coursePracticeWriteService);
     }
 
     @Test
@@ -445,13 +449,8 @@ class CourseServiceTest {
                 courseService.startCourseSessionContentPractice(250L, 350L, 550L, 2L);
 
         assertEquals(450L, response.examId());
-        verify(examService, times(1)).upsertExamMembership(
-                eq(fixture.exam),
-                eq(participant),
-                eq("viewer"),
-                eq(Boolean.FALSE),
-                eq(Boolean.FALSE),
-                eq(Boolean.FALSE));
+        verify(coursePracticeWriteService, times(1))
+                .ensureParticipantAnchoredExamMembership(eq(fixture.exam), eq(2L));
     }
 
     @Test
@@ -471,13 +470,8 @@ class CourseServiceTest {
                 courseService.startCourseSessionContentExamPracticeAttempt(260L, 360L, 560L, 2L);
 
         assertEquals(9001L, response.attemptId());
-        verify(examService).upsertExamMembership(
-                eq(fixture.exam),
-                eq(participant),
-                eq("viewer"),
-                eq(Boolean.FALSE),
-                eq(Boolean.FALSE),
-                eq(Boolean.FALSE));
+        verify(coursePracticeWriteService)
+                .ensureParticipantAnchoredExamMembership(eq(fixture.exam), eq(2L));
         verify(examService).startPracticeAttempt(fixture.exam.getId(), 2L);
     }
 
@@ -498,13 +492,8 @@ class CourseServiceTest {
                 courseService.joinCourseSessionContentGroupPractice(270L, 370L, 570L, request);
 
         assertEquals(fixture.exam.getId(), response.examId());
-        verify(examService).upsertExamMembership(
-                eq(fixture.exam),
-                eq(participant),
-                eq("viewer"),
-                eq(Boolean.FALSE),
-                eq(Boolean.FALSE),
-                eq(Boolean.FALSE));
+        verify(coursePracticeWriteService)
+                .ensureParticipantAnchoredExamMembership(eq(fixture.exam), eq(2L));
         verify(examGroupPracticeService).join(fixture.exam.getId(), request);
     }
 
@@ -525,13 +514,8 @@ class CourseServiceTest {
                 courseService.createCourseSessionContentGroupPractice(280L, 380L, 580L, request);
 
         assertEquals(fixture.exam.getId(), response.examId());
-        verify(examService).upsertExamMembership(
-                eq(fixture.exam),
-                eq(participant),
-                eq("viewer"),
-                eq(Boolean.FALSE),
-                eq(Boolean.FALSE),
-                eq(Boolean.FALSE));
+        verify(coursePracticeWriteService)
+                .ensureParticipantAnchoredExamMembership(eq(fixture.exam), eq(2L));
         verify(examGroupPracticeService).create(fixture.exam.getId(), request);
     }
 

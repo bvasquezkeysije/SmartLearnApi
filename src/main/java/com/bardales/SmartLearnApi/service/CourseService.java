@@ -85,6 +85,7 @@ public class CourseService {
     private final UserRepository userRepository;
     private final ExamService examService;
     private final ExamGroupPracticeService examGroupPracticeService;
+    private final CoursePracticeWriteService coursePracticeWriteService;
 
     public CourseService(
             CourseRepository courseRepository,
@@ -98,7 +99,8 @@ public class CourseService {
             ExamRepository examRepository,
             UserRepository userRepository,
             ExamService examService,
-            ExamGroupPracticeService examGroupPracticeService) {
+            ExamGroupPracticeService examGroupPracticeService,
+            CoursePracticeWriteService coursePracticeWriteService) {
         this.courseRepository = courseRepository;
         this.courseMembershipRepository = courseMembershipRepository;
         this.courseExamRepository = courseExamRepository;
@@ -111,6 +113,7 @@ public class CourseService {
         this.userRepository = userRepository;
         this.examService = examService;
         this.examGroupPracticeService = examGroupPracticeService;
+        this.coursePracticeWriteService = coursePracticeWriteService;
     }
 
     @Transactional(readOnly = true)
@@ -606,6 +609,7 @@ public class CourseService {
     public CourseSessionContentPracticeStartResponse startCourseSessionContentPractice(
             Long courseId, Long sessionId, Long contentId, Long userId) {
         Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, userId);
+        coursePracticeWriteService.ensureParticipantAnchoredExamMembership(sourceExam, userId);
 
         String examName = trimOrNull(sourceExam.getName());
         if (examName == null) {
@@ -708,6 +712,7 @@ public class CourseService {
     public ExamPracticeStartResponse startCourseSessionContentExamPracticeAttempt(
             Long courseId, Long sessionId, Long contentId, Long userId) {
         Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, userId);
+        coursePracticeWriteService.ensureParticipantAnchoredExamMembership(sourceExam, userId);
         return examService.startPracticeAttempt(sourceExam.getId(), userId);
     }
 
@@ -715,6 +720,7 @@ public class CourseService {
     public ExamGroupStateResponse joinCourseSessionContentGroupPractice(
             Long courseId, Long sessionId, Long contentId, ExamGroupJoinRequest request) {
         Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, request.userId());
+        coursePracticeWriteService.ensureParticipantAnchoredExamMembership(sourceExam, request.userId());
         return examGroupPracticeService.join(sourceExam.getId(), request);
     }
 
@@ -722,6 +728,7 @@ public class CourseService {
     public ExamGroupStateResponse createCourseSessionContentGroupPractice(
             Long courseId, Long sessionId, Long contentId, ExamGroupJoinRequest request) {
         Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, request.userId());
+        coursePracticeWriteService.ensureParticipantAnchoredExamMembership(sourceExam, request.userId());
         return examGroupPracticeService.create(sourceExam.getId(), request);
     }
 
@@ -732,7 +739,7 @@ public class CourseService {
         return examGroupPracticeService.start(sourceExam.getId(), request);
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public ExamGroupStateResponse getCourseSessionContentGroupPracticeState(
             Long courseId, Long sessionId, Long contentId, Long sessionGroupId, Long userId) {
         Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, userId);
@@ -1535,7 +1542,7 @@ public class CourseService {
     }
 
     private Exam requireCourseSessionContentExam(Long courseId, Long sessionId, Long contentId, Long userId) {
-        User requester = requireUser(userId);
+        requireUser(userId);
 
         CourseSession session = courseSessionRepository
                 .findById(sessionId)
@@ -1565,17 +1572,6 @@ public class CourseService {
             throw new BadRequestException("Este contenido no tiene un examen asociado");
         }
 
-        Long ownerUserId = course.getUser() == null ? null : course.getUser().getId();
-        boolean isOwner = ownerUserId != null && ownerUserId.equals(userId);
-        if (!isOwner) {
-            examService.upsertExamMembership(
-                    sourceExam,
-                    requester,
-                    "viewer",
-                    Boolean.FALSE,
-                    Boolean.FALSE,
-                    Boolean.FALSE);
-        }
         return sourceExam;
     }
 

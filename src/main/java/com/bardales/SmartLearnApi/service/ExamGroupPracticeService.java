@@ -26,6 +26,7 @@ import com.bardales.SmartLearnApi.dto.exam.ExamGroupStartRequest;
 import com.bardales.SmartLearnApi.dto.exam.ExamGroupStateResponse;
 import com.bardales.SmartLearnApi.dto.exam.QuestionResponse;
 import com.bardales.SmartLearnApi.exception.BadRequestException;
+import com.bardales.SmartLearnApi.exception.ForbiddenException;
 import com.bardales.SmartLearnApi.exception.NotFoundException;
 import java.text.Normalizer;
 import java.time.Duration;
@@ -201,11 +202,11 @@ public class ExamGroupPracticeService {
         return toGroupState(session, access.user().getId(), access.canStartGroup());
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public ExamGroupStateResponse state(Long examId, Long sessionId, Long userId) {
         GroupAccess access = resolveGroupAccess(examId, userId);
         ExamGroupSession session = requireSession(examId, sessionId);
-        ensureSessionMember(session, access.user());
+        requireSessionMemberReadAccess(session, access.user().getId());
 
         // Si el cliente consulta una sesion finalizada, solo redirigir a una sala
         // mas nueva creada DESPUES de que esta sesion termino (reinicio explicito).
@@ -216,17 +217,32 @@ public class ExamGroupPracticeService {
             if (latestSession != null
                     && latestSession.getId() != null
                     && !latestSession.getId().equals(session.getId())
-                    && isNewerSessionSinceFinished(session, latestSession)) {
-                ensureSessionMember(latestSession, access.user());
-                latestSession = refreshSessionPresence(latestSession);
+                    && isNewerSessionSinceFinished(session, latestSession)
+                    && hasExistingSessionMembership(latestSession, access.user().getId())) {
                 return toGroupState(latestSession, userId, access.canStartGroup());
             }
         }
 
-        session = refreshSessionPresence(session);
-        session = syncSessionPhase(session);
-
         return toGroupState(session, userId, access.canStartGroup());
+    }
+
+    private void requireSessionMemberReadAccess(ExamGroupSession session, Long userId) {
+        if (session == null || session.getId() == null || userId == null) {
+            throw new ForbiddenException("No tienes permiso para ver el estado de esta sala grupal.");
+        }
+        if (hasExistingSessionMembership(session, userId)) {
+            return;
+        }
+        throw new ForbiddenException("No perteneces a esta sala grupal.");
+    }
+
+    private boolean hasExistingSessionMembership(ExamGroupSession session, Long userId) {
+        if (session == null || session.getId() == null || userId == null) {
+            return false;
+        }
+        return examGroupSessionMemberRepository
+                .findBySessionIdAndUserIdAndDeletedAtIsNull(session.getId(), userId)
+                .isPresent();
     }
 
     private boolean isNewerSessionSinceFinished(ExamGroupSession finishedSession, ExamGroupSession candidateSession) {

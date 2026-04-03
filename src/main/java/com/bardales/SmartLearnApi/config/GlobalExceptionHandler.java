@@ -1,6 +1,7 @@
 package com.bardales.SmartLearnApi.config;
 
 import com.bardales.SmartLearnApi.exception.BadRequestException;
+import com.bardales.SmartLearnApi.exception.ForbiddenException;
 import com.bardales.SmartLearnApi.exception.NotFoundException;
 import com.bardales.SmartLearnApi.exception.UnauthorizedException;
 import java.time.LocalDateTime;
@@ -31,6 +32,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BadRequestException.class)
     public ResponseEntity<Map<String, Object>> handleBadRequest(BadRequestException ex) {
         return build(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<Map<String, Object>> handleForbidden(ForbiddenException ex) {
+        return build(HttpStatus.FORBIDDEN, ex.getMessage());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
