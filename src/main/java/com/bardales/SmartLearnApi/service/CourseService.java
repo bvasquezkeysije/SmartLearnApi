@@ -712,24 +712,21 @@ public class CourseService {
     public ExamPracticeStartResponse startCourseSessionContentExamPracticeAttempt(
             Long courseId, Long sessionId, Long contentId, Long userId) {
         Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, userId);
-        coursePracticeWriteService.ensureParticipantAnchoredExamMembership(sourceExam, userId);
-        return examService.startPracticeAttempt(sourceExam.getId(), userId);
+        return coursePracticeWriteService.startAnchoredExamPracticeAttempt(sourceExam, userId);
     }
 
     @Transactional
     public ExamGroupStateResponse joinCourseSessionContentGroupPractice(
             Long courseId, Long sessionId, Long contentId, ExamGroupJoinRequest request) {
         Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, request.userId());
-        coursePracticeWriteService.ensureParticipantAnchoredExamMembership(sourceExam, request.userId());
-        return examGroupPracticeService.join(sourceExam.getId(), request);
+        return coursePracticeWriteService.joinAnchoredGroupPractice(sourceExam, request);
     }
 
     @Transactional
     public ExamGroupStateResponse createCourseSessionContentGroupPractice(
             Long courseId, Long sessionId, Long contentId, ExamGroupJoinRequest request) {
         Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, request.userId());
-        coursePracticeWriteService.ensureParticipantAnchoredExamMembership(sourceExam, request.userId());
-        return examGroupPracticeService.create(sourceExam.getId(), request);
+        return coursePracticeWriteService.createAnchoredGroupPractice(sourceExam, request);
     }
 
     @Transactional

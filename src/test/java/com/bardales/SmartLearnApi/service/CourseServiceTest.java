@@ -464,15 +464,14 @@ class CourseServiceTest {
         when(userRepository.findById(2L)).thenReturn(Optional.of(participant));
         when(courseMembershipRepository.findByCourseIdAndUserIdAndDeletedAtIsNull(fixture.course.getId(), 2L))
                 .thenReturn(Optional.of(membership));
-        when(examService.startPracticeAttempt(fixture.exam.getId(), 2L)).thenReturn(expected);
+        when(coursePracticeWriteService.startAnchoredExamPracticeAttempt(fixture.exam, 2L)).thenReturn(expected);
 
         ExamPracticeStartResponse response =
                 courseService.startCourseSessionContentExamPracticeAttempt(260L, 360L, 560L, 2L);
 
         assertEquals(9001L, response.attemptId());
         verify(coursePracticeWriteService)
-                .ensureParticipantAnchoredExamMembership(eq(fixture.exam), eq(2L));
-        verify(examService).startPracticeAttempt(fixture.exam.getId(), 2L);
+                .startAnchoredExamPracticeAttempt(eq(fixture.exam), eq(2L));
     }
 
     @Test
@@ -486,15 +485,14 @@ class CourseServiceTest {
         when(userRepository.findById(2L)).thenReturn(Optional.of(participant));
         when(courseMembershipRepository.findByCourseIdAndUserIdAndDeletedAtIsNull(fixture.course.getId(), 2L))
                 .thenReturn(Optional.of(membership));
-        when(examGroupPracticeService.join(fixture.exam.getId(), request)).thenReturn(expected);
+        when(coursePracticeWriteService.joinAnchoredGroupPractice(fixture.exam, request)).thenReturn(expected);
 
         ExamGroupStateResponse response =
                 courseService.joinCourseSessionContentGroupPractice(270L, 370L, 570L, request);
 
         assertEquals(fixture.exam.getId(), response.examId());
         verify(coursePracticeWriteService)
-                .ensureParticipantAnchoredExamMembership(eq(fixture.exam), eq(2L));
-        verify(examGroupPracticeService).join(fixture.exam.getId(), request);
+                .joinAnchoredGroupPractice(eq(fixture.exam), eq(request));
     }
 
     @Test
@@ -508,15 +506,14 @@ class CourseServiceTest {
         when(userRepository.findById(2L)).thenReturn(Optional.of(participant));
         when(courseMembershipRepository.findByCourseIdAndUserIdAndDeletedAtIsNull(fixture.course.getId(), 2L))
                 .thenReturn(Optional.of(membership));
-        when(examGroupPracticeService.create(fixture.exam.getId(), request)).thenReturn(expected);
+        when(coursePracticeWriteService.createAnchoredGroupPractice(fixture.exam, request)).thenReturn(expected);
 
         ExamGroupStateResponse response =
                 courseService.createCourseSessionContentGroupPractice(280L, 380L, 580L, request);
 
         assertEquals(fixture.exam.getId(), response.examId());
         verify(coursePracticeWriteService)
-                .ensureParticipantAnchoredExamMembership(eq(fixture.exam), eq(2L));
-        verify(examGroupPracticeService).create(fixture.exam.getId(), request);
+                .createAnchoredGroupPractice(eq(fixture.exam), eq(request));
     }
 
     private AnchoredExamFixture buildAnchoredExamFixture(Long baseId, String contentType) {

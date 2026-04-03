@@ -3,8 +3,12 @@ package com.bardales.SmartLearnApi.service;
 import com.bardales.SmartLearnApi.domain.entity.Exam;
 import com.bardales.SmartLearnApi.domain.entity.User;
 import com.bardales.SmartLearnApi.domain.repository.UserRepository;
+import com.bardales.SmartLearnApi.dto.exam.ExamGroupJoinRequest;
+import com.bardales.SmartLearnApi.dto.exam.ExamGroupStateResponse;
+import com.bardales.SmartLearnApi.dto.exam.ExamPracticeStartResponse;
 import com.bardales.SmartLearnApi.exception.NotFoundException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -12,13 +16,18 @@ public class CoursePracticeWriteService {
 
     private final UserRepository userRepository;
     private final ExamService examService;
+    private final ExamGroupPracticeService examGroupPracticeService;
 
-    public CoursePracticeWriteService(UserRepository userRepository, ExamService examService) {
+    public CoursePracticeWriteService(
+            UserRepository userRepository,
+            ExamService examService,
+            ExamGroupPracticeService examGroupPracticeService) {
         this.userRepository = userRepository;
         this.examService = examService;
+        this.examGroupPracticeService = examGroupPracticeService;
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = false)
     public void ensureParticipantAnchoredExamMembership(Exam sourceExam, Long userId) {
         if (sourceExam == null || sourceExam.getId() == null || userId == null) {
             return;
@@ -40,5 +49,23 @@ public class CoursePracticeWriteService {
                 Boolean.FALSE,
                 Boolean.FALSE,
                 Boolean.FALSE);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = false)
+    public ExamPracticeStartResponse startAnchoredExamPracticeAttempt(Exam sourceExam, Long userId) {
+        ensureParticipantAnchoredExamMembership(sourceExam, userId);
+        return examService.startPracticeAttempt(sourceExam.getId(), userId);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = false)
+    public ExamGroupStateResponse joinAnchoredGroupPractice(Exam sourceExam, ExamGroupJoinRequest request) {
+        ensureParticipantAnchoredExamMembership(sourceExam, request.userId());
+        return examGroupPracticeService.join(sourceExam.getId(), request);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = false)
+    public ExamGroupStateResponse createAnchoredGroupPractice(Exam sourceExam, ExamGroupJoinRequest request) {
+        ensureParticipantAnchoredExamMembership(sourceExam, request.userId());
+        return examGroupPracticeService.create(sourceExam.getId(), request);
     }
 }
