@@ -39,7 +39,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 @RestController
-@RequestMapping({"/api/v1/exams", "/api/v1/ia/exams"})
+@RequestMapping("/api/v1/exams")
 public class ExamApiController {
 
     private final ExamService examService;
