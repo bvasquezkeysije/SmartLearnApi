@@ -59,6 +59,7 @@ public class ScheduleService {
     @Transactional
     public ScheduleModuleResponse getModule(Long userId, Long scheduleId) {
         User user = requireUser(userId);
+        ensurePersonalBaseProfile(user);
         AccessContext access = resolveAccessContext(user, scheduleId);
         List<ScheduleActivityResponse> activities = scheduleActivityRepository
                 .findByScheduleProfileIdAndDeletedAtIsNullOrderByCreatedAtAsc(access.profile().getId())
@@ -176,12 +177,9 @@ public class ScheduleService {
             return requireScheduleAccess(preferredScheduleId, user.getId());
         }
 
-        List<ScheduleProfile> ownedProfiles = scheduleProfileRepository
-                .findByOwnerUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(user.getId());
-        for (ScheduleProfile profile : ownedProfiles) {
-            if (profile != null && profile.getId() != null && profile.getDeletedAt() == null) {
-                return new AccessContext(profile, "owner", true, true);
-            }
+        ScheduleProfile personalBaseProfile = ensurePersonalBaseProfile(user);
+        if (personalBaseProfile != null && personalBaseProfile.getId() != null) {
+            return new AccessContext(personalBaseProfile, "owner", true, true);
         }
 
         List<ScheduleMembership> memberships = scheduleMembershipRepository
@@ -200,15 +198,18 @@ public class ScheduleService {
             return new AccessContext(profile, role, canEdit, canShare);
         }
 
-        ScheduleProfile defaultProfile = createDefaultProfile(user);
-        return new AccessContext(defaultProfile, "owner", true, true);
+        throw new NotFoundException("No se pudo resolver un horario para el usuario.");
     }
 
     private List<ScheduleProfileOptionResponse> listAvailableProfiles(User user) {
         Map<Long, ScheduleProfileOptionResponse> profilesById = new LinkedHashMap<>();
 
-        List<ScheduleProfile> ownedProfiles = scheduleProfileRepository
-                .findByOwnerUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(user.getId());
+        List<ScheduleProfile> ownedProfiles = listOwnedProfiles(user);
+        if (ownedProfiles.isEmpty()) {
+            ScheduleProfile personalBaseProfile = ensurePersonalBaseProfile(user);
+            ownedProfiles = personalBaseProfile == null ? List.of() : List.of(personalBaseProfile);
+        }
+
         for (ScheduleProfile profile : ownedProfiles) {
             if (profile == null || profile.getId() == null || profile.getDeletedAt() != null) {
                 continue;
@@ -219,8 +220,7 @@ public class ScheduleService {
             profilesById.put(profile.getId(), toProfileOptionResponse(profile, "owner", true, true, ownerName));
         }
 
-        List<ScheduleMembership> memberships = scheduleMembershipRepository
-                .findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(user.getId());
+        List<ScheduleMembership> memberships = listSharedMemberships(user);
         for (ScheduleMembership membership : memberships) {
             if (membership == null) {
                 continue;
@@ -248,6 +248,24 @@ public class ScheduleService {
         }
 
         return List.copyOf(profilesById.values());
+    }
+
+    private List<ScheduleProfile> listOwnedProfiles(User user) {
+        return scheduleProfileRepository.findByOwnerUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(user.getId());
+    }
+
+    private List<ScheduleMembership> listSharedMemberships(User user) {
+        return scheduleMembershipRepository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(user.getId());
+    }
+
+    private ScheduleProfile ensurePersonalBaseProfile(User user) {
+        List<ScheduleProfile> ownedProfiles = listOwnedProfiles(user);
+        for (ScheduleProfile profile : ownedProfiles) {
+            if (profile != null && profile.getId() != null && profile.getDeletedAt() == null) {
+                return profile;
+            }
+        }
+        return createDefaultProfile(user);
     }
 
     private ScheduleProfileOptionResponse toProfileOptionResponse(
