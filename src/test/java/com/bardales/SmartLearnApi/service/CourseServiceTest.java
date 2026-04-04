@@ -33,10 +33,12 @@ import com.bardales.SmartLearnApi.domain.repository.ExamAttemptRepository;
 import com.bardales.SmartLearnApi.domain.repository.ExamRepository;
 import com.bardales.SmartLearnApi.domain.repository.UserRepository;
 import com.bardales.SmartLearnApi.dto.course.CourseCompetencySaveRequest;
+import com.bardales.SmartLearnApi.dto.course.CourseCreateRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseModuleResponse;
 import com.bardales.SmartLearnApi.dto.course.CourseParticipantSaveRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseResponse;
 import com.bardales.SmartLearnApi.dto.course.CourseSessionContentPracticeStartResponse;
+import com.bardales.SmartLearnApi.dto.course.CourseUpdateRequest;
 import com.bardales.SmartLearnApi.dto.exam.ExamRenameRequest;
 import com.bardales.SmartLearnApi.dto.exam.ExamGroupJoinRequest;
 import com.bardales.SmartLearnApi.dto.exam.ExamGroupStateResponse;
@@ -50,6 +52,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -311,6 +314,89 @@ class CourseServiceTest {
         assertEquals(1, response.competencies().size());
         assertEquals("Analisis", response.competencies().getFirst().name());
         assertEquals("avanzado", response.competencies().getFirst().level());
+    }
+
+    @Test
+    void createCourseForcesJoinModeOpenWhenVisibilityIsPrivate() {
+        User owner = new User();
+        owner.setName("Owner");
+        owner.setUsername("owner");
+        owner.setEmail("owner@mail.com");
+        setBaseFields(owner, 1L);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
+        when(courseRepository.existsByCodeIgnoreCaseAndDeletedAtIsNull("PRIV-101")).thenReturn(false);
+        when(courseRepository.save(any(Course.class))).thenAnswer(invocation -> {
+            Course saved = invocation.getArgument(0);
+            setBaseFields(saved, 801L);
+            return saved;
+        });
+        when(courseSessionRepository.findByCourseIdAndDeletedAtIsNullOrderByCreatedAtDesc(801L)).thenReturn(List.of());
+        when(courseExamRepository.findByCourseIdOrderByCreatedAtAsc(801L)).thenReturn(List.of());
+        when(courseMembershipRepository.findByCourseIdAndDeletedAtIsNullOrderByCreatedAtAsc(801L)).thenReturn(List.of());
+        when(courseCompetencyRepository.findByCourseIdAndDeletedAtIsNullOrderBySortOrderAscCreatedAtAsc(801L))
+                .thenReturn(List.of());
+
+        courseService.createCourse(new CourseCreateRequest(
+                1L,
+                "Curso privado",
+                null,
+                null,
+                "PRIV-101",
+                "private",
+                "request",
+                null,
+                null));
+
+        ArgumentCaptor<Course> savedCourseCaptor = ArgumentCaptor.forClass(Course.class);
+        verify(courseRepository).save(savedCourseCaptor.capture());
+        assertEquals("private", savedCourseCaptor.getValue().getVisibility());
+        assertEquals("open", savedCourseCaptor.getValue().getJoinMode());
+    }
+
+    @Test
+    void updateCourseForcesJoinModeOpenWhenVisibilityChangesToPrivate() {
+        User owner = new User();
+        owner.setName("Owner");
+        owner.setUsername("owner");
+        owner.setEmail("owner@mail.com");
+        setBaseFields(owner, 1L);
+
+        Course course = new Course();
+        course.setUser(owner);
+        course.setName("Curso publico");
+        course.setVisibility("public");
+        course.setJoinMode("request");
+        course.setPriority("important");
+        course.setSortOrder(0);
+        course.setCode("PUB-101");
+        setBaseFields(course, 802L);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
+        when(courseRepository.findByIdAndUserIdAndDeletedAtIsNull(802L, 1L)).thenReturn(Optional.of(course));
+        when(courseRepository.existsByCodeIgnoreCaseAndDeletedAtIsNullAndIdNot("PUB-101", 802L)).thenReturn(false);
+        when(courseRepository.save(any(Course.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(courseSessionRepository.findByCourseIdAndDeletedAtIsNullOrderByCreatedAtDesc(802L)).thenReturn(List.of());
+        when(courseExamRepository.findByCourseIdOrderByCreatedAtAsc(802L)).thenReturn(List.of());
+        when(courseMembershipRepository.findByCourseIdAndDeletedAtIsNullOrderByCreatedAtAsc(802L)).thenReturn(List.of());
+        when(courseCompetencyRepository.findByCourseIdAndDeletedAtIsNullOrderBySortOrderAscCreatedAtAsc(802L))
+                .thenReturn(List.of());
+
+        courseService.updateCourse(
+                802L,
+                new CourseUpdateRequest(
+                        1L,
+                        "Curso privado",
+                        null,
+                        null,
+                        "PUB-101",
+                        "private",
+                        "request",
+                        "important",
+                        0));
+
+        assertEquals("private", course.getVisibility());
+        assertEquals("open", course.getJoinMode());
     }
 
     @Test

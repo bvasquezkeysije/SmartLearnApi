@@ -176,8 +176,10 @@ public class CourseService {
         course.setDescription(trimOrNull(request.description()));
         course.setCoverImageData(trimOrNull(request.coverImageData()));
         course.setCode(resolveCourseCode(request.code(), name, null));
-        course.setVisibility(normalizeCourseVisibility(request.visibility(), true));
-        course.setJoinMode(normalizeCourseJoinMode(request.joinMode(), true));
+        String visibility = normalizeCourseVisibility(request.visibility(), true);
+        String joinMode = normalizeJoinModeForVisibility(visibility, normalizeCourseJoinMode(request.joinMode(), true));
+        course.setVisibility(visibility);
+        course.setJoinMode(joinMode);
         course.setPriority(normalizeCoursePriority(request.priority(), true));
         course.setSortOrder(normalizeCourseSortOrder(request.sortOrder(), true));
         course = courseRepository.save(course);
@@ -913,7 +915,7 @@ public class CourseService {
         String joinMode = request.joinMode() == null
                 ? normalizeCourseJoinMode(course.getJoinMode(), false)
                 : normalizeCourseJoinMode(request.joinMode(), true);
-        course.setJoinMode(joinMode);
+        course.setJoinMode(normalizeJoinModeForVisibility(visibility, joinMode));
         String priority = request.priority() == null
                 ? normalizeCoursePriority(course.getPriority(), false)
                 : normalizeCoursePriority(request.priority(), true);
@@ -1061,6 +1063,13 @@ public class CourseService {
         return "open";
     }
 
+    private String normalizeJoinModeForVisibility(String visibility, String joinMode) {
+        if ("private".equals(visibility)) {
+            return "open";
+        }
+        return joinMode;
+    }
+
     private Integer normalizeCourseSortOrder(Integer rawSortOrder, boolean strict) {
         if (rawSortOrder == null) {
             return 0;
@@ -1181,7 +1190,9 @@ public class CourseService {
             normalizedCode = courseId == null ? "CURSO-SIN-CODIGO" : "CURSO-" + courseId;
         }
         String normalizedVisibility = normalizeCourseVisibility(course.getVisibility(), false);
-        String normalizedJoinMode = normalizeCourseJoinMode(course.getJoinMode(), false);
+        String normalizedJoinMode = normalizeJoinModeForVisibility(
+            normalizedVisibility,
+            normalizeCourseJoinMode(course.getJoinMode(), false));
         String normalizedPriority = normalizeCoursePriority(course.getPriority(), false);
         Integer normalizedSortOrder = normalizeCourseSortOrder(course.getSortOrder(), false);
         Long ownerUserId = course.getUser() == null ? null : course.getUser().getId();

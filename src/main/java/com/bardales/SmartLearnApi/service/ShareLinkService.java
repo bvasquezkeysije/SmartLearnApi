@@ -231,16 +231,7 @@ public class ShareLinkService {
         }
 
         if (!ownerId.equals(user.getId())) {
-            CourseMembership membership = courseMembershipRepository
-                    .findByCourseIdAndUserIdAndDeletedAtIsNull(course.getId(), user.getId())
-                    .orElse(null);
-            if (membership == null) {
-                membership = new CourseMembership();
-                membership.setCourse(course);
-                membership.setUser(user);
-                membership.setRole("viewer");
-                courseMembershipRepository.save(membership);
-            }
+            ensurePendingCourseInvitation(shareLink, course, user);
         }
 
         String courseName = trimOrNull(course.getName());
@@ -251,7 +242,9 @@ public class ShareLinkService {
                 "course",
                 course.getId(),
                 courseName,
-                "Curso compartido agregado a tu modulo de cursos.");
+            ownerId.equals(user.getId())
+                ? "Este enlace corresponde a tu curso."
+                : "Invitacion recibida. Aceptala desde notificaciones para unirte al curso.");
     }
 
     private ShareLinkClaimResponse claimSalaLink(ShareLink shareLink, User user) {
@@ -357,7 +350,7 @@ public class ShareLinkService {
 
         ShareLink shareLink = createShareLink(owner, resourceType, resourceId, request.expiresInHours());
         String invitationStatus =
-                (resourceType.equals("exam") || resourceType.equals("schedule"))
+            (resourceType.equals("exam") || resourceType.equals("schedule") || resourceType.equals("course"))
                         ? INVITATION_STATUS_PENDING
                         : INVITATION_STATUS_ACCEPTED;
         String resolvedExamRole = invitationExamRole;
@@ -496,6 +489,16 @@ public class ShareLinkService {
                     recipient,
                     normalizeExamRole(notification.getExamRole()),
                     Boolean.TRUE.equals(notification.getExamCanShare()));
+        } else if (resourceType.equals("course")) {
+            Course course = courseRepository.findById(notification.getResourceId())
+                    .orElseThrow(() -> new NotFoundException("Curso no encontrado"));
+            if (course.getDeletedAt() != null) {
+                throw new NotFoundException("Curso no encontrado");
+            }
+            Long ownerUserId = course.getUser() == null ? null : course.getUser().getId();
+            if (ownerUserId != null && !ownerUserId.equals(recipient.getId())) {
+                upsertCourseMembership(course, recipient, "viewer");
+            }
         } else if (resourceType.equals("schedule")) {
             ScheduleProfile scheduleProfile = scheduleService.requireScheduleProfile(notification.getResourceId());
             scheduleService.upsertScheduleMembership(scheduleProfile, recipient, "viewer", false);
@@ -784,6 +787,56 @@ public class ShareLinkService {
                         ? "curso"
                         : resourceType.equals("schedule") ? "horario" : "sala";
         return ownerName + " te compartio " + resourceLabel + ": " + resourceName;
+    }
+
+    private void ensurePendingCourseInvitation(ShareLink shareLink, Course course, User recipient) {
+        ShareNotification existing = shareNotificationRepository
+                .findTopByShareLinkIdAndRecipientUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(
+                        shareLink.getId(),
+                        recipient.getId())
+                .orElse(null);
+
+        if (existing != null) {
+            existing.setInvitationStatus(INVITATION_STATUS_PENDING);
+            existing.setInvitationRespondedAt(null);
+            existing.setDeletedAt(null);
+            existing.setReadAt(null);
+            shareNotificationRepository.save(existing);
+            return;
+        }
+
+        ShareNotification notification = new ShareNotification();
+        notification.setSenderUser(shareLink.getOwnerUser());
+        notification.setRecipientUser(recipient);
+        notification.setShareLink(shareLink);
+        notification.setResourceType("course");
+        notification.setResourceId(course.getId());
+        String courseName = trimOrNull(course.getName());
+        notification.setResourceName(courseName == null ? "Curso" : courseName);
+        notification.setMessage(buildNotificationMessage(shareLink.getOwnerUser(), "course", notification.getResourceName()));
+        notification.setInvitationStatus(INVITATION_STATUS_PENDING);
+        notification.setInvitationRespondedAt(null);
+        notification.setExamRole(null);
+        notification.setExamCanShare(null);
+        notification.setReadAt(null);
+        notification.setDeletedAt(null);
+        shareNotificationRepository.save(notification);
+    }
+
+    private void upsertCourseMembership(Course course, User user, String role) {
+        CourseMembership membership = courseMembershipRepository
+                .findByCourseIdAndUserId(course.getId(), user.getId())
+                .orElseGet(() -> {
+                    CourseMembership created = new CourseMembership();
+                    created.setCourse(course);
+                    created.setUser(user);
+                    return created;
+                });
+        membership.setCourse(course);
+        membership.setUser(user);
+        membership.setRole(role);
+        membership.setDeletedAt(null);
+        courseMembershipRepository.save(membership);
     }
 
     private String trimOrNull(String value) {
