@@ -22,11 +22,14 @@ import java.util.Map;
 import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ScheduleService {
+    private static final Logger log = LoggerFactory.getLogger(ScheduleService.class);
 
     private static final Pattern TIME_24H_PATTERN = Pattern.compile("^([01]\\d|2[0-3]):([0-5]\\d)$");
     private static final Set<String> ALLOWED_DAYS = Set.of(
@@ -73,6 +76,18 @@ public class ScheduleService {
         ScheduleProfile profile = access.profile();
         Long ownerUserId = profile.getOwnerUser() == null ? null : profile.getOwnerUser().getId();
         List<ScheduleProfileOptionResponse> availableProfiles = listAvailableProfiles(user);
+        long ownProfiles = availableProfiles.stream()
+            .filter(option -> option != null && option.ownerUserId() != null && option.ownerUserId().equals(user.getId()))
+            .count();
+        long sharedProfiles = Math.max(0, availableProfiles.size() - ownProfiles);
+        log.info(
+            "SCHEDULES_MODULE userId={} requestedScheduleId={} selectedProfileId={} accessRole={} ownProfiles={} sharedProfiles={}",
+            user.getId(),
+            scheduleId,
+            profile.getId(),
+            access.role(),
+            ownProfiles,
+            sharedProfiles);
         return new ScheduleModuleResponse(
                 profile.getId(),
                 fallbackName(profile.getName(), "Mi horario"),
@@ -325,7 +340,14 @@ public class ScheduleService {
         profile.setReferenceImageData(null);
         profile.setReferenceImageName(null);
         profile.setDeletedAt(null);
-        return scheduleProfileRepository.save(profile);
+        ScheduleProfile saved = scheduleProfileRepository.save(profile);
+        log.info(
+            "SCHEDULES_DEFAULT_PROFILE_CREATED requesterUserId={} ownerUserId={} profileId={} profileName={}",
+            user.getId(),
+            saved.getOwnerUser() == null ? null : saved.getOwnerUser().getId(),
+            saved.getId(),
+            saved.getName());
+        return saved;
     }
 
     private void applyActivityRequest(ScheduleActivity activity, ScheduleActivitySaveRequest request) {
