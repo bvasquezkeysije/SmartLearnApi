@@ -41,6 +41,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Comparator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,6 +52,7 @@ public class ExamGroupPracticeService {
     private static final long MEMBER_PRESENCE_TIMEOUT_SECONDS = 30;
     private static final String PHASE_OPEN = "open";
     private static final String PHASE_REVIEW = "review";
+    private static final Logger log = LoggerFactory.getLogger(ExamGroupPracticeService.class);
 
     private final ExamRepository examRepository;
     private final UserRepository userRepository;
@@ -202,7 +205,7 @@ public class ExamGroupPracticeService {
         return toGroupState(session, access.user().getId(), access.canStartGroup());
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public ExamGroupStateResponse state(Long examId, Long sessionId, Long userId) {
         GroupAccess access = resolveGroupAccess(examId, userId);
         ExamGroupSession session = requireSession(examId, sessionId);
@@ -222,6 +225,9 @@ public class ExamGroupPracticeService {
                 return toGroupState(latestSession, userId, access.canStartGroup());
             }
         }
+
+        // El servidor decide el avance por timeout de review, sin depender de clicks manuales.
+        session = syncSessionPhase(session);
 
         return toGroupState(session, userId, access.canStartGroup());
     }
@@ -1066,6 +1072,13 @@ public class ExamGroupPracticeService {
                 session.setPhase(PHASE_REVIEW);
                 session.setPhaseStartedAt(now);
                 session.setPhaseEndsAt(now.plusSeconds(reviewSeconds));
+                log.info(
+                        "GROUP_PHASE_AUTO_OPEN_TO_REVIEW sessionId={} examId={} questionIndex={} reason={} reviewSeconds={}",
+                        session.getId(),
+                        session.getExam() == null ? null : session.getExam().getId(),
+                        session.getCurrentQuestionIndex(),
+                        timerExpired ? "timer_expired" : "all_answered",
+                        reviewSeconds);
                 changed = true;
                 phase = PHASE_REVIEW;
             }
@@ -1083,6 +1096,12 @@ public class ExamGroupPracticeService {
                     session.setPhase(PHASE_OPEN);
                     session.setPhaseStartedAt(null);
                     session.setPhaseEndsAt(null);
+                    log.info(
+                            "GROUP_PHASE_AUTO_REVIEW_TO_FINISHED sessionId={} examId={} lastQuestionIndex={} totalQuestions={}",
+                            session.getId(),
+                            session.getExam() == null ? null : session.getExam().getId(),
+                            currentIndex,
+                            totalQuestions);
                 } else {
                     session.setCurrentQuestionIndex(currentIndex + 1);
                     session.setCurrentQuestionStartedAt(now);
@@ -1091,6 +1110,14 @@ public class ExamGroupPracticeService {
                     Question nextQuestion = resolveCurrentQuestion(session).orElse(null);
                     session.setPhaseEndsAt(resolveQuestionDeadline(nextQuestion, now));
                     session.setQuestionVersion((session.getQuestionVersion() == null ? 1 : session.getQuestionVersion()) + 1);
+                    log.info(
+                            "GROUP_PHASE_AUTO_REVIEW_TO_OPEN sessionId={} examId={} fromQuestionIndex={} toQuestionIndex={} nextDeadline={} questionVersion={}",
+                            session.getId(),
+                            session.getExam() == null ? null : session.getExam().getId(),
+                            currentIndex,
+                            session.getCurrentQuestionIndex(),
+                            session.getPhaseEndsAt(),
+                            session.getQuestionVersion());
                 }
                 changed = true;
             }
