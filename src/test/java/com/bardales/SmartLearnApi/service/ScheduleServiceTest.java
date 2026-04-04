@@ -18,6 +18,7 @@ import com.bardales.SmartLearnApi.domain.repository.ScheduleProfileRepository;
 import com.bardales.SmartLearnApi.domain.repository.UserRepository;
 import com.bardales.SmartLearnApi.dto.schedule.ScheduleModuleResponse;
 import java.time.LocalDateTime;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -62,10 +63,14 @@ class ScheduleServiceTest {
         ScheduleMembership membership = membership(sharedProfile, user, "viewer", false);
 
         ScheduleProfile createdPersonal = scheduleProfile(301L, user, "Horario de User B");
+        AtomicInteger ownedProfilesCalls = new AtomicInteger(0);
 
         when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
         when(scheduleProfileRepository.findByOwnerUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(user.getId()))
-                .thenReturn(List.of(), List.of(createdPersonal), List.of(createdPersonal));
+            .thenAnswer(invocation -> {
+                int call = ownedProfilesCalls.getAndIncrement();
+                return call == 0 ? List.of() : List.of(createdPersonal);
+            });
         when(scheduleMembershipRepository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(user.getId()))
                 .thenReturn(List.of(membership));
         when(scheduleProfileRepository.save(any(ScheduleProfile.class))).thenReturn(createdPersonal);
@@ -92,7 +97,7 @@ class ScheduleServiceTest {
 
         when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
         when(scheduleProfileRepository.findByOwnerUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(user.getId()))
-                .thenReturn(List.of(ownProfile), List.of(ownProfile));
+            .thenReturn(List.of(ownProfile));
         when(scheduleProfileRepository.findByIdAndDeletedAtIsNull(sharedProfile.getId())).thenReturn(Optional.of(sharedProfile));
         when(scheduleMembershipRepository.findByScheduleProfileIdAndUserIdAndDeletedAtIsNull(sharedProfile.getId(), user.getId()))
                 .thenReturn(Optional.of(membership));
