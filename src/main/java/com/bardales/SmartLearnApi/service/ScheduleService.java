@@ -41,7 +41,21 @@ public class ScheduleService {
             "friday",
             "saturday",
             "sunday");
-    private static final Set<String> ALLOWED_COLORS = Set.of("blue", "emerald", "amber", "violet", "rose");
+        private static final Set<String> ALLOWED_COLORS = Set.of(
+            "blue",
+            "emerald",
+            "amber",
+            "violet",
+            "rose",
+            "cyan",
+            "indigo",
+            "teal",
+            "orange",
+            "lime",
+            "fuchsia",
+            "slate",
+            "red",
+            "pink");
 
     private final UserRepository userRepository;
     private final ScheduleProfileRepository scheduleProfileRepository;

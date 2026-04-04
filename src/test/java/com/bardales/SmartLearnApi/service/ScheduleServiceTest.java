@@ -5,10 +5,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.bardales.SmartLearnApi.domain.entity.ScheduleActivity;
 import com.bardales.SmartLearnApi.domain.entity.ScheduleMembership;
 import com.bardales.SmartLearnApi.domain.entity.ScheduleProfile;
 import com.bardales.SmartLearnApi.domain.entity.User;
@@ -16,6 +19,8 @@ import com.bardales.SmartLearnApi.domain.repository.ScheduleActivityRepository;
 import com.bardales.SmartLearnApi.domain.repository.ScheduleMembershipRepository;
 import com.bardales.SmartLearnApi.domain.repository.ScheduleProfileRepository;
 import com.bardales.SmartLearnApi.domain.repository.UserRepository;
+import com.bardales.SmartLearnApi.dto.schedule.ScheduleActivityResponse;
+import com.bardales.SmartLearnApi.dto.schedule.ScheduleActivitySaveRequest;
 import com.bardales.SmartLearnApi.dto.schedule.ScheduleModuleResponse;
 import java.time.LocalDateTime;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -24,6 +29,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -50,7 +56,7 @@ class ScheduleServiceTest {
                 scheduleMembershipRepository,
                 scheduleActivityRepository);
 
-        when(scheduleActivityRepository.findByScheduleProfileIdAndDeletedAtIsNullOrderByCreatedAtAsc(any()))
+        lenient().when(scheduleActivityRepository.findByScheduleProfileIdAndDeletedAtIsNullOrderByCreatedAtAsc(any()))
                 .thenReturn(List.of());
     }
 
@@ -112,6 +118,83 @@ class ScheduleServiceTest {
         assertEquals(2, response.profiles().size());
         assertTrue(response.profiles().stream().anyMatch(p -> p.profileId().equals(ownProfile.getId()) && "owner".equals(p.accessRole())));
         assertTrue(response.profiles().stream().anyMatch(p -> p.profileId().equals(sharedProfile.getId()) && "viewer".equals(p.accessRole())));
+    }
+
+    @Test
+    void createActivityAllowsBlankDescriptionAndPersistsNull() {
+        User owner = user(10L, "User B", "userb");
+        ScheduleProfile ownProfile = scheduleProfile(101L, owner, "Horario de B");
+
+        when(userRepository.findById(owner.getId())).thenReturn(Optional.of(owner));
+        when(scheduleProfileRepository.findByIdAndDeletedAtIsNull(ownProfile.getId())).thenReturn(Optional.of(ownProfile));
+        when(scheduleActivityRepository.save(any(ScheduleActivity.class))).thenAnswer(invocation -> {
+            ScheduleActivity saved = invocation.getArgument(0);
+            setBaseFields(saved, 501L);
+            return saved;
+        });
+
+        ScheduleActivityResponse response = service.createActivity(
+                ownProfile.getId(),
+                new ScheduleActivitySaveRequest(
+                        owner.getId(),
+                        "Algebra",
+                        "   ",
+                        "monday",
+                        "08:00",
+                        "09:30",
+                        "",
+                        "cyan",
+                        1));
+
+        ArgumentCaptor<ScheduleActivity> captor = ArgumentCaptor.forClass(ScheduleActivity.class);
+        verify(scheduleActivityRepository).save(captor.capture());
+        assertEquals(null, captor.getValue().getDescription());
+        assertEquals(null, captor.getValue().getLocation());
+        assertEquals("cyan", captor.getValue().getColorKey());
+        assertEquals(null, response.description());
+    }
+
+    @Test
+    void updateActivityAllowsRemovingDescription() {
+        User owner = user(10L, "User B", "userb");
+        ScheduleProfile ownProfile = scheduleProfile(101L, owner, "Horario de B");
+
+        ScheduleActivity existing = new ScheduleActivity();
+        existing.setScheduleProfile(ownProfile);
+        existing.setTitle("Fisica");
+        existing.setDescription("Clase anterior");
+        existing.setDayKey("tuesday");
+        existing.setStartTime("10:00");
+        existing.setEndTime("11:00");
+        existing.setLocation("Aula 2");
+        existing.setColorKey("blue");
+        setBaseFields(existing, 601L);
+
+        when(userRepository.findById(owner.getId())).thenReturn(Optional.of(owner));
+        when(scheduleProfileRepository.findByIdAndDeletedAtIsNull(ownProfile.getId())).thenReturn(Optional.of(ownProfile));
+        when(scheduleActivityRepository.findByIdAndScheduleProfileIdAndDeletedAtIsNull(601L, ownProfile.getId()))
+                .thenReturn(Optional.of(existing));
+        when(scheduleActivityRepository.save(any(ScheduleActivity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ScheduleActivityResponse response = service.updateActivity(
+                ownProfile.getId(),
+                601L,
+                new ScheduleActivitySaveRequest(
+                        owner.getId(),
+                        "Fisica",
+                        "",
+                        "tuesday",
+                        "10:00",
+                        "11:30",
+                        "",
+                        "pink",
+                        1));
+
+        verify(scheduleActivityRepository).findByIdAndScheduleProfileIdAndDeletedAtIsNull(eq(601L), eq(ownProfile.getId()));
+        assertEquals(null, existing.getDescription());
+        assertEquals(null, existing.getLocation());
+        assertEquals("pink", existing.getColorKey());
+        assertEquals(null, response.description());
     }
 
     private static User user(Long id, String name, String username) {
