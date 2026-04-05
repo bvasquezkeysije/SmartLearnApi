@@ -351,7 +351,7 @@ public class CourseService {
             throw new NotFoundException("Curso no encontrado");
         }
 
-        Integer weekOrder = normalizeWeekOrder(request.weekOrder(), session.getId(), null);
+        Integer weekOrder = normalizeWeekOrderForCreate(request.weekOrder(), session.getId());
         String weekName = trimOrNull(request.name());
         if (weekName == null) {
             weekName = "SEMANA " + weekOrder + ": Inicio";
@@ -1689,6 +1689,31 @@ public class CourseService {
             if (rawWeekOrder.equals(week.getWeekOrder())) {
                 throw new BadRequestException("weekOrder ya existe en esta sesion");
             }
+        }
+        return rawWeekOrder;
+    }
+
+    private Integer normalizeWeekOrderForCreate(Integer rawWeekOrder, Long sessionId) {
+        if (rawWeekOrder != null && rawWeekOrder < 1) {
+            throw new BadRequestException("weekOrder debe ser mayor o igual a 1");
+        }
+
+        List<CourseWeek> weeks = courseWeekRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(sessionId);
+        int nextOrder = 1;
+        boolean requestedExists = false;
+
+        for (CourseWeek week : weeks) {
+            if (week == null || week.getWeekOrder() == null) {
+                continue;
+            }
+            nextOrder = Math.max(nextOrder, week.getWeekOrder() + 1);
+            if (rawWeekOrder != null && rawWeekOrder.equals(week.getWeekOrder())) {
+                requestedExists = true;
+            }
+        }
+
+        if (rawWeekOrder == null || requestedExists) {
+            return nextOrder;
         }
         return rawWeekOrder;
     }

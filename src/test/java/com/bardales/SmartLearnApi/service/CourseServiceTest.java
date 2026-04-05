@@ -639,6 +639,51 @@ class CourseServiceTest {
     }
 
     @Test
+    void addCourseWeekUsesNextOrderWhenRequestedOrderAlreadyExists() {
+        User owner = new User();
+        owner.setName("Owner");
+        owner.setUsername("owner");
+        owner.setEmail("owner@mail.com");
+        setBaseFields(owner, 1L);
+
+        Course course = new Course();
+        course.setUser(owner);
+        course.setName("Curso");
+        course.setVisibility("private");
+        setBaseFields(course, 70L);
+
+        CourseSession session = new CourseSession();
+        session.setCourse(course);
+        session.setName("SESION 1: Inicio");
+        setBaseFields(session, 80L);
+
+        CourseWeek existingWeek = new CourseWeek();
+        existingWeek.setCourseSession(session);
+        existingWeek.setWeekOrder(1);
+        existingWeek.setName("SEMANA 1: Inicio");
+        setBaseFields(existingWeek, 81L);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
+        when(courseSessionRepository.findByIdAndCourseUserIdAndDeletedAtIsNull(80L, 1L)).thenReturn(Optional.of(session));
+        when(courseWeekRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(80L))
+                .thenAnswer(invocation -> List.of(existingWeek));
+        when(courseWeekRepository.save(any(CourseWeek.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(courseSessionRepository.findByCourseIdAndDeletedAtIsNullOrderByCreatedAtDesc(70L)).thenReturn(List.of(session));
+        when(courseSessionContentRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByContentOrderAscCreatedAtAsc(80L))
+                .thenReturn(List.of());
+        when(courseExamRepository.findByCourseIdOrderByCreatedAtAsc(70L)).thenReturn(List.of());
+        when(courseMembershipRepository.findByCourseIdAndDeletedAtIsNullOrderByCreatedAtAsc(70L)).thenReturn(List.of());
+        when(courseCompetencyRepository.findByCourseIdAndDeletedAtIsNullOrderBySortOrderAscCreatedAtAsc(70L))
+                .thenReturn(List.of());
+
+        courseService.addCourseWeek(70L, 80L, new CourseWeekSaveRequest(1L, null, null, 1));
+
+        ArgumentCaptor<CourseWeek> savedWeekCaptor = ArgumentCaptor.forClass(CourseWeek.class);
+        verify(courseWeekRepository).save(savedWeekCaptor.capture());
+        assertEquals(2, savedWeekCaptor.getValue().getWeekOrder());
+    }
+
+    @Test
     void updateCourseWeekReturnsBadRequestWhenWeekOrderConflictsAtPersistence() {
         User owner = new User();
         owner.setName("Owner");
