@@ -351,20 +351,30 @@ public class CourseService {
             throw new NotFoundException("Curso no encontrado");
         }
 
-        Integer weekOrder = normalizeWeekOrderForCreate(request.weekOrder(), session.getId());
-        String weekName = trimOrNull(request.name());
-        if (weekName == null) {
-            weekName = "SEMANA " + weekOrder + ": Inicio";
+        Integer startingOrder = normalizeWeekOrderForCreate(request.weekOrder(), session.getId());
+        String requestedWeekName = trimOrNull(request.name());
+        String weekDescription = trimOrNull(request.description());
+
+        CourseWeek savedWeek = null;
+        for (int offset = 0; offset < 30; offset += 1) {
+            int candidateOrder = startingOrder + offset;
+            String candidateName =
+                    requestedWeekName == null ? "SEMANA " + candidateOrder + ": Inicio" : requestedWeekName;
+
+            CourseWeek week = new CourseWeek();
+            week.setCourseSession(session);
+            week.setWeekOrder(candidateOrder);
+            week.setName(candidateName);
+            week.setDescription(weekDescription);
+            try {
+                savedWeek = courseWeekRepository.save(week);
+                break;
+            } catch (DataIntegrityViolationException ignored) {
+                // Reintenta con el siguiente orden para absorber conflictos residuales de indice.
+            }
         }
 
-        CourseWeek week = new CourseWeek();
-        week.setCourseSession(session);
-        week.setWeekOrder(weekOrder);
-        week.setName(weekName);
-        week.setDescription(trimOrNull(request.description()));
-        try {
-            courseWeekRepository.save(week);
-        } catch (DataIntegrityViolationException ignored) {
+        if (savedWeek == null) {
             throw new BadRequestException("weekOrder ya existe en esta sesion");
         }
 
@@ -393,9 +403,7 @@ public class CourseService {
 
         week.setWeekOrder(weekOrder);
         week.setName(weekName);
-        if (request.description() != null) {
-            week.setDescription(trimOrNull(request.description()));
-        }
+        week.setDescription(trimOrNull(request.description()));
         try {
             courseWeekRepository.save(week);
         } catch (DataIntegrityViolationException ignored) {
