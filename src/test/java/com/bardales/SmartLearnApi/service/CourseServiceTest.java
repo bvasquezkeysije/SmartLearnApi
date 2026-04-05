@@ -670,8 +670,7 @@ class CourseServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
         when(courseSessionRepository.findByIdAndCourseUserIdAndDeletedAtIsNull(20L, 1L)).thenReturn(Optional.of(session));
         when(courseWeekRepository.findMaxWeekOrderByCourseSessionId(20L)).thenReturn(0);
-        when(courseWeekRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(20L))
-                .thenReturn(List.of());
+        when(courseWeekRepository.findByCourseSessionIdOrderByWeekOrderAscCreatedAtAsc(20L)).thenReturn(List.of());
         when(courseWeekRepository.save(any(CourseWeek.class)))
                 .thenThrow(new DataIntegrityViolationException("duplicate key"));
 
@@ -710,6 +709,8 @@ class CourseServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
         when(courseSessionRepository.findByIdAndCourseUserIdAndDeletedAtIsNull(80L, 1L)).thenReturn(Optional.of(session));
                 when(courseWeekRepository.findMaxWeekOrderByCourseSessionId(80L)).thenReturn(2);
+        when(courseWeekRepository.findByCourseSessionIdOrderByWeekOrderAscCreatedAtAsc(80L))
+                .thenReturn(List.of(existingWeek));
         when(courseWeekRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(80L))
                 .thenAnswer(invocation -> List.of(existingWeek));
                 when(courseWeekRepository.save(any(CourseWeek.class))).thenAnswer(invocation -> invocation.getArgument(0));

@@ -1698,9 +1698,8 @@ public class CourseService {
         int nextOrder = maxAnyOrder == null ? 1 : Math.max(1, maxAnyOrder + 1);
         boolean requestedExists = false;
 
-        List<CourseWeek> activeWeeks =
-                courseWeekRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(sessionId);
-        for (CourseWeek week : activeWeeks) {
+        List<CourseWeek> allWeeks = courseWeekRepository.findByCourseSessionIdOrderByWeekOrderAscCreatedAtAsc(sessionId);
+        for (CourseWeek week : allWeeks) {
             if (week == null || week.getWeekOrder() == null) {
                 continue;
             }
