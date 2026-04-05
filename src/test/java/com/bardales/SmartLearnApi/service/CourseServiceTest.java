@@ -669,7 +669,6 @@ class CourseServiceTest {
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
         when(courseSessionRepository.findByIdAndCourseUserIdAndDeletedAtIsNull(20L, 1L)).thenReturn(Optional.of(session));
-        when(courseWeekRepository.findMaxWeekOrderByCourseSessionId(20L)).thenReturn(0);
         when(courseWeekRepository.findByCourseSessionIdOrderByWeekOrderAscCreatedAtAsc(20L)).thenReturn(List.of());
         when(courseWeekRepository.save(any(CourseWeek.class)))
                 .thenThrow(new DataIntegrityViolationException("duplicate key"));
@@ -708,7 +707,6 @@ class CourseServiceTest {
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
         when(courseSessionRepository.findByIdAndCourseUserIdAndDeletedAtIsNull(80L, 1L)).thenReturn(Optional.of(session));
-                when(courseWeekRepository.findMaxWeekOrderByCourseSessionId(80L)).thenReturn(2);
         when(courseWeekRepository.findByCourseSessionIdOrderByWeekOrderAscCreatedAtAsc(80L))
                 .thenReturn(List.of(existingWeek));
         when(courseWeekRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(80L))
@@ -726,7 +724,59 @@ class CourseServiceTest {
 
         ArgumentCaptor<CourseWeek> savedWeekCaptor = ArgumentCaptor.forClass(CourseWeek.class);
                 verify(courseWeekRepository, times(1)).save(savedWeekCaptor.capture());
-                assertEquals(3, savedWeekCaptor.getValue().getWeekOrder());
+                assertEquals(2, savedWeekCaptor.getValue().getWeekOrder());
+    }
+
+    @Test
+    void addCourseWeekReusesOrderOneWhenOnlyDeletedWeekUsesIt() {
+        User owner = new User();
+        owner.setName("Owner");
+        owner.setUsername("owner");
+        owner.setEmail("owner@mail.com");
+        setBaseFields(owner, 1L);
+
+        Course course = new Course();
+        course.setUser(owner);
+        course.setName("Curso");
+        course.setVisibility("private");
+        setBaseFields(course, 110L);
+
+        CourseSession session = new CourseSession();
+        session.setCourse(course);
+        session.setName("SESION 1: Inicio");
+        setBaseFields(session, 120L);
+
+        CourseWeek deletedWeek = new CourseWeek();
+        deletedWeek.setCourseSession(session);
+        deletedWeek.setWeekOrder(1);
+        deletedWeek.setName("SEMANA 1: Eliminada");
+        deletedWeek.setDeletedAt(LocalDateTime.now().minusDays(1));
+        setBaseFields(deletedWeek, 121L);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
+        when(courseSessionRepository.findByIdAndCourseUserIdAndDeletedAtIsNull(120L, 1L)).thenReturn(Optional.of(session));
+        when(courseWeekRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(120L))
+                .thenReturn(List.of());
+        when(courseWeekRepository.findByCourseSessionIdOrderByWeekOrderAscCreatedAtAsc(120L))
+                .thenReturn(List.of(deletedWeek));
+        when(courseWeekRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(courseWeekRepository.save(any(CourseWeek.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(courseSessionRepository.findByCourseIdAndDeletedAtIsNullOrderByCreatedAtDesc(110L)).thenReturn(List.of(session));
+        when(courseWeekRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(120L))
+                .thenReturn(List.of());
+        when(courseSessionContentRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByContentOrderAscCreatedAtAsc(120L))
+                .thenReturn(List.of());
+        when(courseExamRepository.findByCourseIdOrderByCreatedAtAsc(110L)).thenReturn(List.of());
+        when(courseMembershipRepository.findByCourseIdAndDeletedAtIsNullOrderByCreatedAtAsc(110L)).thenReturn(List.of());
+        when(courseCompetencyRepository.findByCourseIdAndDeletedAtIsNullOrderBySortOrderAscCreatedAtAsc(110L))
+                .thenReturn(List.of());
+
+        courseService.addCourseWeek(110L, 120L, new CourseWeekSaveRequest(1L, null, null, 1));
+
+        ArgumentCaptor<CourseWeek> savedWeekCaptor = ArgumentCaptor.forClass(CourseWeek.class);
+        verify(courseWeekRepository, times(1)).save(savedWeekCaptor.capture());
+        assertEquals(1, savedWeekCaptor.getValue().getWeekOrder());
+        verify(courseWeekRepository, times(1)).saveAll(anyList());
     }
 
     @Test

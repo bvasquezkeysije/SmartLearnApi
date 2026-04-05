@@ -351,6 +351,7 @@ public class CourseService {
         }
 
         Integer startingOrder = normalizeWeekOrderForCreate(request.weekOrder(), session.getId());
+        releaseOrderFromDeletedWeeksIfNeeded(session.getId(), startingOrder);
         String requestedWeekName = trimOrNull(request.name());
         String weekDescription = trimOrNull(request.description());
 
@@ -1694,15 +1695,16 @@ public class CourseService {
             throw new BadRequestException("weekOrder debe ser mayor o igual a 1");
         }
 
-        Integer maxAnyOrder = courseWeekRepository.findMaxWeekOrderByCourseSessionId(sessionId);
-        int nextOrder = maxAnyOrder == null ? 1 : Math.max(1, maxAnyOrder + 1);
+        int nextOrder = 1;
         boolean requestedExists = false;
 
-        List<CourseWeek> allWeeks = courseWeekRepository.findByCourseSessionIdOrderByWeekOrderAscCreatedAtAsc(sessionId);
-        for (CourseWeek week : allWeeks) {
+        List<CourseWeek> activeWeeks =
+                courseWeekRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(sessionId);
+        for (CourseWeek week : activeWeeks) {
             if (week == null || week.getWeekOrder() == null) {
                 continue;
             }
+            nextOrder = Math.max(nextOrder, week.getWeekOrder() + 1);
             if (rawWeekOrder != null && rawWeekOrder.equals(week.getWeekOrder())) {
                 requestedExists = true;
             }
@@ -1712,6 +1714,47 @@ public class CourseService {
             return nextOrder;
         }
         return rawWeekOrder;
+    }
+
+    private void releaseOrderFromDeletedWeeksIfNeeded(Long sessionId, Integer targetOrder) {
+        if (sessionId == null || targetOrder == null) {
+            return;
+        }
+
+        List<CourseWeek> allWeeks = courseWeekRepository.findByCourseSessionIdOrderByWeekOrderAscCreatedAtAsc(sessionId);
+        if (allWeeks.isEmpty()) {
+            return;
+        }
+
+        boolean activeUsesTarget = false;
+        List<CourseWeek> deletedConflicts = new ArrayList<>();
+        int maxOrder = 0;
+
+        for (CourseWeek week : allWeeks) {
+            if (week == null || week.getWeekOrder() == null) {
+                continue;
+            }
+            maxOrder = Math.max(maxOrder, week.getWeekOrder());
+            if (!targetOrder.equals(week.getWeekOrder())) {
+                continue;
+            }
+            if (week.getDeletedAt() == null) {
+                activeUsesTarget = true;
+                break;
+            }
+            deletedConflicts.add(week);
+        }
+
+        if (activeUsesTarget || deletedConflicts.isEmpty()) {
+            return;
+        }
+
+        int nextOrder = Math.max(1, maxOrder + 1);
+        for (CourseWeek deletedWeek : deletedConflicts) {
+            deletedWeek.setWeekOrder(nextOrder);
+            nextOrder += 1;
+        }
+        courseWeekRepository.saveAll(deletedConflicts);
     }
 
     private CourseWeek resolveWeekForContent(CourseSession session, Long weekId) {
