@@ -321,7 +321,6 @@ public class CourseService {
         session.setName(sessionName);
         session.setWeeklyContent(trimOrNull(request.weeklyContent()));
         courseSessionRepository.save(session);
-        resolveOrCreateDefaultWeek(session);
 
         return toCourseResponse(course);
     }
@@ -1758,19 +1757,6 @@ public class CourseService {
         if (changed) {
             courseSessionContentRepository.saveAll(contents);
         }
-    }
-
-    private CourseWeek resolveOrCreateDefaultWeek(CourseSession session) {
-        List<CourseWeek> weeks = courseWeekRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(session.getId());
-        if (!weeks.isEmpty()) {
-            return weeks.get(0);
-        }
-        CourseWeek week = new CourseWeek();
-        week.setCourseSession(session);
-        week.setWeekOrder(1);
-        week.setName("SEMANA 1: Inicio");
-        week.setDescription(trimOrNull(session.getWeeklyContent()));
-        return courseWeekRepository.save(week);
     }
 
     private void applyContentData(

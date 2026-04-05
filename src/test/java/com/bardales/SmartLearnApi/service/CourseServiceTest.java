@@ -38,6 +38,7 @@ import com.bardales.SmartLearnApi.dto.course.CourseCreateRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseModuleResponse;
 import com.bardales.SmartLearnApi.dto.course.CourseParticipantSaveRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseResponse;
+import com.bardales.SmartLearnApi.dto.course.CourseSessionCreateRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseSessionContentPracticeStartResponse;
 import com.bardales.SmartLearnApi.dto.course.CourseWeekSaveRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseUpdateRequest;
@@ -603,6 +604,48 @@ class CourseServiceTest {
         assertEquals(fixture.exam.getId(), response.examId());
         verify(coursePracticeWriteService)
                 .createAnchoredGroupPractice(eq(fixture.exam), eq(request));
+    }
+
+    @Test
+    void createCourseSessionDoesNotCreateDefaultWeekAutomatically() {
+        User owner = new User();
+        owner.setName("Owner");
+        owner.setUsername("owner");
+        owner.setEmail("owner@mail.com");
+        setBaseFields(owner, 1L);
+
+        Course course = new Course();
+        course.setUser(owner);
+        course.setName("Curso");
+        course.setVisibility("private");
+        course.setPriority("important");
+        course.setSortOrder(0);
+        setBaseFields(course, 100L);
+
+        CourseSession savedSession = new CourseSession();
+        savedSession.setCourse(course);
+        savedSession.setName("SESION 1: Intro");
+        savedSession.setWeeklyContent(null);
+        setBaseFields(savedSession, 200L);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
+        when(courseRepository.findByIdAndUserIdAndDeletedAtIsNull(100L, 1L)).thenReturn(Optional.of(course));
+        when(courseSessionRepository.save(any(CourseSession.class))).thenAnswer(invocation -> savedSession);
+        when(courseSessionRepository.findByCourseIdAndDeletedAtIsNullOrderByCreatedAtDesc(100L)).thenReturn(List.of(savedSession));
+        when(courseWeekRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(200L))
+                .thenReturn(List.of());
+        when(courseSessionContentRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByContentOrderAscCreatedAtAsc(200L))
+                .thenReturn(List.of());
+        when(courseExamRepository.findByCourseIdOrderByCreatedAtAsc(100L)).thenReturn(List.of());
+        when(courseMembershipRepository.findByCourseIdAndDeletedAtIsNullOrderByCreatedAtAsc(100L)).thenReturn(List.of());
+        when(courseCompetencyRepository.findByCourseIdAndDeletedAtIsNullOrderBySortOrderAscCreatedAtAsc(100L))
+                .thenReturn(List.of());
+
+        CourseResponse response =
+                courseService.createCourseSession(100L, new CourseSessionCreateRequest(1L, "SESION 1: Intro", null));
+
+        assertEquals(1, response.sessions().size());
+        verify(courseWeekRepository, never()).save(any(CourseWeek.class));
     }
 
     @Test
