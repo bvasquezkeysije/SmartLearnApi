@@ -762,8 +762,6 @@ class CourseServiceTest {
         when(courseWeekRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
         when(courseWeekRepository.save(any(CourseWeek.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(courseSessionRepository.findByCourseIdAndDeletedAtIsNullOrderByCreatedAtDesc(110L)).thenReturn(List.of(session));
-        when(courseWeekRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(120L))
-                .thenReturn(List.of());
         when(courseSessionContentRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByContentOrderAscCreatedAtAsc(120L))
                 .thenReturn(List.of());
         when(courseExamRepository.findByCourseIdOrderByCreatedAtAsc(110L)).thenReturn(List.of());

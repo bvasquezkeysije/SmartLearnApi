@@ -61,6 +61,7 @@ import com.bardales.SmartLearnApi.exception.BadRequestException;
 import com.bardales.SmartLearnApi.exception.NotFoundException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -350,8 +351,12 @@ public class CourseService {
             throw new NotFoundException("Curso no encontrado");
         }
 
+        try {
+            normalizeDeletedWeekOrdersForSession(session.getId());
+        } catch (DataIntegrityViolationException ignored) {
+            throw new BadRequestException("No se pudo normalizar el orden de semanas eliminadas");
+        }
         Integer startingOrder = normalizeWeekOrderForCreate(request.weekOrder(), session.getId());
-        releaseOrderFromDeletedWeeksIfNeeded(session.getId(), startingOrder);
         String requestedWeekName = trimOrNull(request.name());
         String weekDescription = trimOrNull(request.description());
 
@@ -416,6 +421,7 @@ public class CourseService {
 
         LocalDateTime now = LocalDateTime.now();
         week.setDeletedAt(now);
+        week.setWeekOrder(resolveNextDeletedWeekOrder(session.getId(), week.getId()));
         courseWeekRepository.save(week);
 
         List<CourseSessionContent> contents = courseSessionContentRepository
@@ -1716,45 +1722,76 @@ public class CourseService {
         return rawWeekOrder;
     }
 
-    private void releaseOrderFromDeletedWeeksIfNeeded(Long sessionId, Integer targetOrder) {
-        if (sessionId == null || targetOrder == null) {
+    private void normalizeDeletedWeekOrdersForSession(Long sessionId) {
+        if (sessionId == null) {
             return;
         }
-
         List<CourseWeek> allWeeks = courseWeekRepository.findByCourseSessionIdOrderByWeekOrderAscCreatedAtAsc(sessionId);
         if (allWeeks.isEmpty()) {
             return;
         }
 
-        boolean activeUsesTarget = false;
-        List<CourseWeek> deletedConflicts = new ArrayList<>();
-        int maxOrder = 0;
+        Set<Integer> usedOrders = new HashSet<>();
+        int nextNegative = -1;
+        for (CourseWeek week : allWeeks) {
+            if (week == null || week.getWeekOrder() == null) {
+                continue;
+            }
+            usedOrders.add(week.getWeekOrder());
+            if (week.getWeekOrder() <= nextNegative) {
+                nextNegative = week.getWeekOrder() - 1;
+            }
+        }
+
+        List<CourseWeek> toUpdate = new ArrayList<>();
+        for (CourseWeek week : allWeeks) {
+            if (week == null || week.getDeletedAt() == null) {
+                continue;
+            }
+            Integer currentOrder = week.getWeekOrder();
+            if (currentOrder != null && currentOrder < 0) {
+                continue;
+            }
+
+            while (usedOrders.contains(nextNegative)) {
+                nextNegative -= 1;
+            }
+            if (currentOrder != null) {
+                usedOrders.remove(currentOrder);
+            }
+            week.setWeekOrder(nextNegative);
+            usedOrders.add(nextNegative);
+            toUpdate.add(week);
+            nextNegative -= 1;
+        }
+
+        if (!toUpdate.isEmpty()) {
+            courseWeekRepository.saveAll(toUpdate);
+        }
+    }
+
+    private Integer resolveNextDeletedWeekOrder(Long sessionId, Long excludingWeekId) {
+        List<CourseWeek> allWeeks = courseWeekRepository.findByCourseSessionIdOrderByWeekOrderAscCreatedAtAsc(sessionId);
+        Set<Integer> usedOrders = new HashSet<>();
+        int nextNegative = -1;
 
         for (CourseWeek week : allWeeks) {
             if (week == null || week.getWeekOrder() == null) {
                 continue;
             }
-            maxOrder = Math.max(maxOrder, week.getWeekOrder());
-            if (!targetOrder.equals(week.getWeekOrder())) {
+            if (excludingWeekId != null && week.getId() != null && excludingWeekId.equals(week.getId())) {
                 continue;
             }
-            if (week.getDeletedAt() == null) {
-                activeUsesTarget = true;
-                break;
+            usedOrders.add(week.getWeekOrder());
+            if (week.getWeekOrder() <= nextNegative) {
+                nextNegative = week.getWeekOrder() - 1;
             }
-            deletedConflicts.add(week);
         }
 
-        if (activeUsesTarget || deletedConflicts.isEmpty()) {
-            return;
+        while (usedOrders.contains(nextNegative)) {
+            nextNegative -= 1;
         }
-
-        int nextOrder = Math.max(1, maxOrder + 1);
-        for (CourseWeek deletedWeek : deletedConflicts) {
-            deletedWeek.setWeekOrder(nextOrder);
-            nextOrder += 1;
-        }
-        courseWeekRepository.saveAll(deletedConflicts);
+        return nextNegative;
     }
 
     private CourseWeek resolveWeekForContent(CourseSession session, Long weekId) {
