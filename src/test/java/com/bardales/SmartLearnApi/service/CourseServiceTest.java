@@ -51,7 +51,6 @@ import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -627,6 +626,7 @@ class CourseServiceTest {
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
         when(courseSessionRepository.findByIdAndCourseUserIdAndDeletedAtIsNull(20L, 1L)).thenReturn(Optional.of(session));
+        when(courseWeekRepository.findMaxWeekOrderByCourseSessionId(20L)).thenReturn(0);
         when(courseWeekRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(20L))
                 .thenReturn(List.of());
         when(courseWeekRepository.save(any(CourseWeek.class)))
@@ -666,15 +666,10 @@ class CourseServiceTest {
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
         when(courseSessionRepository.findByIdAndCourseUserIdAndDeletedAtIsNull(80L, 1L)).thenReturn(Optional.of(session));
+                when(courseWeekRepository.findMaxWeekOrderByCourseSessionId(80L)).thenReturn(2);
         when(courseWeekRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(80L))
                 .thenAnswer(invocation -> List.of(existingWeek));
-                AtomicInteger saveAttempts = new AtomicInteger(0);
-                when(courseWeekRepository.save(any(CourseWeek.class))).thenAnswer(invocation -> {
-                        if (saveAttempts.getAndIncrement() == 0) {
-                                throw new DataIntegrityViolationException("duplicate key");
-                        }
-                        return invocation.getArgument(0);
-                });
+                when(courseWeekRepository.save(any(CourseWeek.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(courseSessionRepository.findByCourseIdAndDeletedAtIsNullOrderByCreatedAtDesc(70L)).thenReturn(List.of(session));
         when(courseSessionContentRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByContentOrderAscCreatedAtAsc(80L))
                 .thenReturn(List.of());
@@ -686,10 +681,8 @@ class CourseServiceTest {
         courseService.addCourseWeek(70L, 80L, new CourseWeekSaveRequest(1L, null, null, 1));
 
         ArgumentCaptor<CourseWeek> savedWeekCaptor = ArgumentCaptor.forClass(CourseWeek.class);
-        verify(courseWeekRepository, times(2)).save(savedWeekCaptor.capture());
-        List<CourseWeek> savedWeeks = savedWeekCaptor.getAllValues();
-                assertEquals(2, savedWeeks.get(0).getWeekOrder());
-                assertEquals(3, savedWeeks.get(1).getWeekOrder());
+                verify(courseWeekRepository, times(1)).save(savedWeekCaptor.capture());
+                assertEquals(3, savedWeekCaptor.getValue().getWeekOrder());
     }
 
     @Test

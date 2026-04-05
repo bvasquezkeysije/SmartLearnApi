@@ -355,26 +355,15 @@ public class CourseService {
         String requestedWeekName = trimOrNull(request.name());
         String weekDescription = trimOrNull(request.description());
 
-        CourseWeek savedWeek = null;
-        for (int offset = 0; offset < 30; offset += 1) {
-            int candidateOrder = startingOrder + offset;
-            String candidateName =
-                    requestedWeekName == null ? "SEMANA " + candidateOrder + ": Inicio" : requestedWeekName;
-
-            CourseWeek week = new CourseWeek();
-            week.setCourseSession(session);
-            week.setWeekOrder(candidateOrder);
-            week.setName(candidateName);
-            week.setDescription(weekDescription);
-            try {
-                savedWeek = courseWeekRepository.save(week);
-                break;
-            } catch (DataIntegrityViolationException ignored) {
-                // Reintenta con el siguiente orden para absorber conflictos residuales de indice.
-            }
-        }
-
-        if (savedWeek == null) {
+        String weekName = requestedWeekName == null ? "SEMANA " + startingOrder + ": Inicio" : requestedWeekName;
+        CourseWeek week = new CourseWeek();
+        week.setCourseSession(session);
+        week.setWeekOrder(startingOrder);
+        week.setName(weekName);
+        week.setDescription(weekDescription);
+        try {
+            courseWeekRepository.save(week);
+        } catch (DataIntegrityViolationException ignored) {
             throw new BadRequestException("weekOrder ya existe en esta sesion");
         }
 
@@ -1706,15 +1695,16 @@ public class CourseService {
             throw new BadRequestException("weekOrder debe ser mayor o igual a 1");
         }
 
-        List<CourseWeek> weeks = courseWeekRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(sessionId);
-        int nextOrder = 1;
+        Integer maxAnyOrder = courseWeekRepository.findMaxWeekOrderByCourseSessionId(sessionId);
+        int nextOrder = maxAnyOrder == null ? 1 : Math.max(1, maxAnyOrder + 1);
         boolean requestedExists = false;
 
-        for (CourseWeek week : weeks) {
+        List<CourseWeek> activeWeeks =
+                courseWeekRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(sessionId);
+        for (CourseWeek week : activeWeeks) {
             if (week == null || week.getWeekOrder() == null) {
                 continue;
             }
-            nextOrder = Math.max(nextOrder, week.getWeekOrder() + 1);
             if (rawWeekOrder != null && rawWeekOrder.equals(week.getWeekOrder())) {
                 requestedExists = true;
             }
