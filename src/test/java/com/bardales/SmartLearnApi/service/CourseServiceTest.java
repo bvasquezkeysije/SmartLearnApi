@@ -19,6 +19,7 @@ import com.bardales.SmartLearnApi.domain.entity.CourseExam;
 import com.bardales.SmartLearnApi.domain.entity.CourseMembership;
 import com.bardales.SmartLearnApi.domain.entity.CourseSession;
 import com.bardales.SmartLearnApi.domain.entity.CourseSessionContent;
+import com.bardales.SmartLearnApi.domain.entity.CourseWeek;
 import com.bardales.SmartLearnApi.domain.entity.Exam;
 import com.bardales.SmartLearnApi.domain.entity.ExamAttempt;
 import com.bardales.SmartLearnApi.domain.entity.User;
@@ -38,6 +39,7 @@ import com.bardales.SmartLearnApi.dto.course.CourseModuleResponse;
 import com.bardales.SmartLearnApi.dto.course.CourseParticipantSaveRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseResponse;
 import com.bardales.SmartLearnApi.dto.course.CourseSessionContentPracticeStartResponse;
+import com.bardales.SmartLearnApi.dto.course.CourseWeekSaveRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseUpdateRequest;
 import com.bardales.SmartLearnApi.dto.exam.ExamRenameRequest;
 import com.bardales.SmartLearnApi.dto.exam.ExamGroupJoinRequest;
@@ -55,6 +57,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -600,6 +603,79 @@ class CourseServiceTest {
         assertEquals(fixture.exam.getId(), response.examId());
         verify(coursePracticeWriteService)
                 .createAnchoredGroupPractice(eq(fixture.exam), eq(request));
+    }
+
+    @Test
+    void addCourseWeekReturnsBadRequestWhenWeekOrderConflictsAtPersistence() {
+        User owner = new User();
+        owner.setName("Owner");
+        owner.setUsername("owner");
+        owner.setEmail("owner@mail.com");
+        setBaseFields(owner, 1L);
+
+        Course course = new Course();
+        course.setUser(owner);
+        course.setName("Curso");
+        course.setVisibility("private");
+        setBaseFields(course, 10L);
+
+        CourseSession session = new CourseSession();
+        session.setCourse(course);
+        session.setName("SESION 1: Inicio");
+        setBaseFields(session, 20L);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
+        when(courseSessionRepository.findByIdAndCourseUserIdAndDeletedAtIsNull(20L, 1L)).thenReturn(Optional.of(session));
+        when(courseWeekRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(20L))
+                .thenReturn(List.of());
+        when(courseWeekRepository.save(any(CourseWeek.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate key"));
+
+        BadRequestException exception = assertThrows(
+                BadRequestException.class,
+                () -> courseService.addCourseWeek(10L, 20L, new CourseWeekSaveRequest(1L, null, null, 1)));
+
+        assertEquals("weekOrder ya existe en esta sesion", exception.getMessage());
+    }
+
+    @Test
+    void updateCourseWeekReturnsBadRequestWhenWeekOrderConflictsAtPersistence() {
+        User owner = new User();
+        owner.setName("Owner");
+        owner.setUsername("owner");
+        owner.setEmail("owner@mail.com");
+        setBaseFields(owner, 1L);
+
+        Course course = new Course();
+        course.setUser(owner);
+        course.setName("Curso");
+        course.setVisibility("private");
+        setBaseFields(course, 30L);
+
+        CourseSession session = new CourseSession();
+        session.setCourse(course);
+        session.setName("SESION 1: Inicio");
+        setBaseFields(session, 40L);
+
+        CourseWeek week = new CourseWeek();
+        week.setCourseSession(session);
+        week.setWeekOrder(1);
+        week.setName("SEMANA 1: Inicio");
+        setBaseFields(week, 50L);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
+        when(courseSessionRepository.findByIdAndCourseUserIdAndDeletedAtIsNull(40L, 1L)).thenReturn(Optional.of(session));
+        when(courseWeekRepository.findByIdAndCourseSessionIdAndDeletedAtIsNull(50L, 40L)).thenReturn(Optional.of(week));
+        when(courseWeekRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(40L))
+                .thenReturn(List.of(week));
+        when(courseWeekRepository.save(any(CourseWeek.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate key"));
+
+        BadRequestException exception = assertThrows(
+                BadRequestException.class,
+                () -> courseService.updateCourseWeek(30L, 40L, 50L, new CourseWeekSaveRequest(1L, "Semana", null, 2)));
+
+        assertEquals("weekOrder ya existe en esta sesion", exception.getMessage());
     }
 
     private AnchoredExamFixture buildAnchoredExamFixture(Long baseId, String contentType) {

@@ -67,6 +67,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -361,7 +362,11 @@ public class CourseService {
         week.setWeekOrder(weekOrder);
         week.setName(weekName);
         week.setDescription(trimOrNull(request.description()));
-        courseWeekRepository.save(week);
+        try {
+            courseWeekRepository.save(week);
+        } catch (DataIntegrityViolationException ignored) {
+            throw new BadRequestException("weekOrder ya existe en esta sesion");
+        }
 
         return toCourseResponse(course);
     }
@@ -391,7 +396,11 @@ public class CourseService {
         if (request.description() != null) {
             week.setDescription(trimOrNull(request.description()));
         }
-        courseWeekRepository.save(week);
+        try {
+            courseWeekRepository.save(week);
+        } catch (DataIntegrityViolationException ignored) {
+            throw new BadRequestException("weekOrder ya existe en esta sesion");
+        }
 
         return toCourseResponse(course);
     }
