@@ -13,6 +13,8 @@ import com.bardales.SmartLearnApi.domain.entity.Exam;
 import com.bardales.SmartLearnApi.domain.entity.ExamGroupSession;
 import com.bardales.SmartLearnApi.domain.entity.ExamGroupSessionMember;
 import com.bardales.SmartLearnApi.domain.entity.ExamMembership;
+import com.bardales.SmartLearnApi.domain.entity.Option;
+import com.bardales.SmartLearnApi.domain.entity.ExamGroupSessionAnswer;
 import com.bardales.SmartLearnApi.domain.entity.Question;
 import com.bardales.SmartLearnApi.domain.entity.User;
 import com.bardales.SmartLearnApi.domain.repository.ExamGroupSessionAnswerRepository;
@@ -24,7 +26,9 @@ import com.bardales.SmartLearnApi.domain.repository.OptionRepository;
 import com.bardales.SmartLearnApi.domain.repository.QuestionRepository;
 import com.bardales.SmartLearnApi.domain.repository.UserRepository;
 import com.bardales.SmartLearnApi.dto.exam.ExamGroupStateResponse;
+import com.bardales.SmartLearnApi.dto.exam.ExamGroupAnswerRequest;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -238,6 +242,94 @@ class ExamGroupPracticeServiceTest {
 
         assertEquals("waiting", state.status());
         assertEquals(session.getId(), state.sessionId());
+    }
+
+    @Test
+    void creatorAnswerDoesNotForceReviewWhenParticipantHeartbeatIsActive() {
+        User owner = user(1L, "Owner", "owner");
+        User participant = user(2L, "Participant", "participant");
+        Exam exam = exam(920L, owner, "Exam heartbeat");
+
+        ExamMembership participantMembership = new ExamMembership();
+        participantMembership.setExam(exam);
+        participantMembership.setUser(participant);
+        participantMembership.setRole("viewer");
+        participantMembership.setCanStartGroup(Boolean.FALSE);
+        setBaseFields(participantMembership, 921L);
+
+        ExamGroupSession session = groupSession(930L, exam, owner, "active", "101", 1, 0);
+        session.setPhase("open");
+        session.setPhaseStartedAt(LocalDateTime.now().minusSeconds(5));
+        session.setPhaseEndsAt(LocalDateTime.now().plusSeconds(30));
+        session.setCurrentQuestionStartedAt(LocalDateTime.now().minusSeconds(5));
+
+        ExamGroupSessionMember ownerMember = sessionMember(session, owner, true);
+        ExamGroupSessionMember participantMember = sessionMember(session, participant, false);
+        participantMember.setLastSeenAt(LocalDateTime.now().minusSeconds(60));
+
+        Question q1 = question(101L, exam, 30, 10);
+        q1.setCorrectAnswer("git diff");
+        Option optionA = new Option();
+        optionA.setQuestion(q1);
+        optionA.setOptionText("git diff");
+        optionA.setIsCorrect(Boolean.TRUE);
+        setBaseFields(optionA, 2001L);
+
+        List<ExamGroupSessionAnswer> storedAnswers = new ArrayList<>();
+
+        when(userRepository.findById(owner.getId())).thenReturn(Optional.of(owner));
+        when(userRepository.findById(participant.getId())).thenReturn(Optional.of(participant));
+        when(examRepository.findByIdAndDeletedAtIsNull(exam.getId())).thenReturn(Optional.of(exam));
+        when(examMembershipRepository.findByExamIdAndUserIdAndDeletedAtIsNull(exam.getId(), participant.getId()))
+                .thenReturn(Optional.of(participantMembership));
+        when(examGroupSessionRepository.findByIdAndExamIdAndDeletedAtIsNull(session.getId(), exam.getId()))
+                .thenReturn(Optional.of(session));
+        when(examGroupSessionMemberRepository
+                .findBySessionIdAndUserIdAndDeletedAtIsNull(session.getId(), owner.getId()))
+                .thenReturn(Optional.of(ownerMember));
+        when(examGroupSessionMemberRepository
+                .findBySessionIdAndUserIdAndDeletedAtIsNull(session.getId(), participant.getId()))
+                .thenReturn(Optional.of(participantMember));
+        when(examGroupSessionMemberRepository.findBySessionIdAndDeletedAtIsNullOrderByCreatedAtAsc(session.getId()))
+                .thenReturn(List.of(ownerMember, participantMember));
+        when(examMembershipRepository.findByExamIdAndDeletedAtIsNullOrderByCreatedAtAsc(exam.getId()))
+                .thenReturn(List.of(participantMembership));
+
+        when(questionRepository.findById(q1.getId())).thenReturn(Optional.of(q1));
+        when(optionRepository.findByQuestionIdOrderByIdAsc(q1.getId())).thenReturn(List.of(optionA));
+
+        when(examGroupSessionMemberRepository.save(any(ExamGroupSessionMember.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        when(examGroupSessionAnswerRepository.findAllForUserQuestion(session.getId(), owner.getId(), q1.getId()))
+                .thenAnswer(invocation -> storedAnswers.stream()
+                        .filter(answer -> answer.getUser() != null && owner.getId().equals(answer.getUser().getId()))
+                        .toList());
+        when(examGroupSessionAnswerRepository.findForQuestion(session.getId(), q1.getId()))
+                .thenAnswer(invocation -> List.copyOf(storedAnswers));
+        when(examGroupSessionAnswerRepository.save(any(ExamGroupSessionAnswer.class)))
+                .thenAnswer(invocation -> {
+                    ExamGroupSessionAnswer answer = invocation.getArgument(0);
+                    if (answer.getId() == null) {
+                        setBaseFields(answer, 3001L + storedAnswers.size());
+                    }
+                    storedAnswers.removeIf(existing -> existing.getId() != null
+                            && answer.getId() != null
+                            && existing.getId().equals(answer.getId()));
+                    storedAnswers.add(answer);
+                    return answer;
+                });
+
+        // Heartbeat de participante: debe reconectarlo antes de que responda el owner.
+        ExamGroupStateResponse participantState = service.state(exam.getId(), session.getId(), participant.getId());
+        assertEquals("open", participantState.phase());
+
+        ExamGroupStateResponse stateAfterOwnerAnswer = service.answer(
+                exam.getId(),
+                new ExamGroupAnswerRequest(owner.getId(), session.getId(), q1.getId(), 1, "a", null));
+
+        assertEquals("open", stateAfterOwnerAnswer.phase());
+        assertEquals("active", stateAfterOwnerAnswer.status());
     }
 
     private Fixture fixtureReviewSession(boolean lastQuestion) {

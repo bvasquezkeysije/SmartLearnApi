@@ -212,6 +212,11 @@ public class ExamGroupPracticeService {
         ExamGroupSession session = requireSession(examId, sessionId);
         requireSessionMemberReadAccess(session, access.user().getId());
 
+        // Heartbeat de presencia: cada consulta de estado renueva conexion del usuario.
+        // Esto evita que participantes activos se marquen como desconectados por timeout.
+        ensureSessionMember(session, access.user());
+        session = refreshSessionPresence(session);
+
         // Si el cliente consulta una sesion finalizada, solo redirigir a una sala
         // mas nueva creada DESPUES de que esta sesion termino (reinicio explicito).
         if ("finished".equals(normalizeStatus(session.getStatus()))) {
