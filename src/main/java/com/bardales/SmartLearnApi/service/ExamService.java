@@ -788,7 +788,9 @@ public class ExamService {
         } catch (DataIntegrityViolationException raceCondition) {
             ExamMembership concurrentMembership = examMembershipRepository
                     .findByExamIdAndUserIdAndDeletedAtIsNull(exam.getId(), participant.getId())
-                    .orElseThrow(() -> raceCondition);
+                    .orElseGet(() -> examMembershipRepository
+                            .findTopByExamIdAndUserIdOrderByIdDesc(exam.getId(), participant.getId())
+                            .orElseThrow(() -> raceCondition));
             concurrentMembership.setRole(normalizeExamRole(role));
             concurrentMembership.setCanShare(Boolean.TRUE.equals(canShare));
             concurrentMembership.setCanStartGroup(Boolean.TRUE.equals(canStartGroup));

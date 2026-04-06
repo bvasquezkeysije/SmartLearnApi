@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface ExamMembershipRepository extends JpaRepository<ExamMembership, Long> {
     List<ExamMembership> findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(Long userId);
     Optional<ExamMembership> findByExamIdAndUserIdAndDeletedAtIsNull(Long examId, Long userId);
+    Optional<ExamMembership> findTopByExamIdAndUserIdOrderByIdDesc(Long examId, Long userId);
     List<ExamMembership> findByExamIdAndDeletedAtIsNullOrderByCreatedAtAsc(Long examId);
     long countByExamIdAndDeletedAtIsNull(Long examId);
 }

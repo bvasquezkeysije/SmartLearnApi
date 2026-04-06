@@ -543,7 +543,9 @@ public class ExamGroupPracticeService {
         } catch (DataIntegrityViolationException raceCondition) {
             ExamMembership concurrentMembership = examMembershipRepository
                     .findByExamIdAndUserIdAndDeletedAtIsNull(exam.getId(), user.getId())
-                    .orElseThrow(() -> raceCondition);
+                    .orElseGet(() -> examMembershipRepository
+                            .findTopByExamIdAndUserIdOrderByIdDesc(exam.getId(), user.getId())
+                            .orElseThrow(() -> raceCondition));
             concurrentMembership.setRole(normalizeRole(concurrentMembership.getRole()));
             concurrentMembership.setCanShare(Boolean.TRUE.equals(concurrentMembership.getCanShare()));
             concurrentMembership.setCanStartGroup(Boolean.TRUE.equals(concurrentMembership.getCanStartGroup()));
@@ -569,7 +571,9 @@ public class ExamGroupPracticeService {
         } catch (DataIntegrityViolationException raceCondition) {
             ExamGroupSessionMember concurrentMember = examGroupSessionMemberRepository
                     .findBySessionIdAndUserIdAndDeletedAtIsNull(session.getId(), user.getId())
-                    .orElseThrow(() -> raceCondition);
+                    .orElseGet(() -> examGroupSessionMemberRepository
+                            .findTopBySessionIdAndUserIdOrderByIdDesc(session.getId(), user.getId())
+                            .orElseThrow(() -> raceCondition));
             concurrentMember.setConnected(Boolean.TRUE);
             concurrentMember.setLastSeenAt(LocalDateTime.now());
             concurrentMember.setDeletedAt(null);
