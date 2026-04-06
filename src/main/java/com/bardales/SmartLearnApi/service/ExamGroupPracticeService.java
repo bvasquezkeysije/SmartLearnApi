@@ -43,6 +43,7 @@ import java.util.Optional;
 import java.util.Comparator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -537,7 +538,18 @@ public class ExamGroupPracticeService {
         membership.setCanShare(Boolean.TRUE.equals(membership.getCanShare()));
         membership.setCanStartGroup(Boolean.TRUE.equals(membership.getCanStartGroup()));
         membership.setDeletedAt(null);
-        examMembershipRepository.save(membership);
+        try {
+            examMembershipRepository.save(membership);
+        } catch (DataIntegrityViolationException raceCondition) {
+            ExamMembership concurrentMembership = examMembershipRepository
+                    .findByExamIdAndUserIdAndDeletedAtIsNull(exam.getId(), user.getId())
+                    .orElseThrow(() -> raceCondition);
+            concurrentMembership.setRole(normalizeRole(concurrentMembership.getRole()));
+            concurrentMembership.setCanShare(Boolean.TRUE.equals(concurrentMembership.getCanShare()));
+            concurrentMembership.setCanStartGroup(Boolean.TRUE.equals(concurrentMembership.getCanStartGroup()));
+            concurrentMembership.setDeletedAt(null);
+            examMembershipRepository.save(concurrentMembership);
+        }
     }
 
     private ExamGroupSessionMember ensureSessionMember(ExamGroupSession session, User user) {
@@ -552,7 +564,17 @@ public class ExamGroupPracticeService {
         member.setConnected(Boolean.TRUE);
         member.setLastSeenAt(LocalDateTime.now());
         member.setDeletedAt(null);
-        return examGroupSessionMemberRepository.save(member);
+        try {
+            return examGroupSessionMemberRepository.save(member);
+        } catch (DataIntegrityViolationException raceCondition) {
+            ExamGroupSessionMember concurrentMember = examGroupSessionMemberRepository
+                    .findBySessionIdAndUserIdAndDeletedAtIsNull(session.getId(), user.getId())
+                    .orElseThrow(() -> raceCondition);
+            concurrentMember.setConnected(Boolean.TRUE);
+            concurrentMember.setLastSeenAt(LocalDateTime.now());
+            concurrentMember.setDeletedAt(null);
+            return examGroupSessionMemberRepository.save(concurrentMember);
+        }
     }
 
     private ExamGroupSession refreshSessionPresence(ExamGroupSession session) {

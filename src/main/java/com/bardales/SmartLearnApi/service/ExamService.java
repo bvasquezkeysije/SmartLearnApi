@@ -54,6 +54,7 @@ import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -782,7 +783,19 @@ public class ExamService {
         membership.setCanStartGroup(Boolean.TRUE.equals(canStartGroup));
         membership.setVisibleInExamList(Boolean.TRUE.equals(visibleInExamList));
         membership.setDeletedAt(null);
-        examMembershipRepository.save(membership);
+        try {
+            examMembershipRepository.save(membership);
+        } catch (DataIntegrityViolationException raceCondition) {
+            ExamMembership concurrentMembership = examMembershipRepository
+                    .findByExamIdAndUserIdAndDeletedAtIsNull(exam.getId(), participant.getId())
+                    .orElseThrow(() -> raceCondition);
+            concurrentMembership.setRole(normalizeExamRole(role));
+            concurrentMembership.setCanShare(Boolean.TRUE.equals(canShare));
+            concurrentMembership.setCanStartGroup(Boolean.TRUE.equals(canStartGroup));
+            concurrentMembership.setVisibleInExamList(Boolean.TRUE.equals(visibleInExamList));
+            concurrentMembership.setDeletedAt(null);
+            examMembershipRepository.save(concurrentMembership);
+        }
     }
 
     @Transactional

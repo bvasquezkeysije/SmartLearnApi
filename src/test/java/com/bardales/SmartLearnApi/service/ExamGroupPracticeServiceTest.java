@@ -1,6 +1,7 @@
 package com.bardales.SmartLearnApi.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -33,6 +34,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -187,6 +189,55 @@ class ExamGroupPracticeServiceTest {
         assertEquals(firstPoll.currentQuestionIndex(), secondPoll.currentQuestionIndex());
         assertEquals(firstPoll.phase(), secondPoll.phase());
         verify(examGroupSessionRepository, atLeastOnce()).save(any(ExamGroupSession.class));
+    }
+
+    @Test
+    void joinHandlesConcurrentMemberInsertWithoutInternalError() {
+        User owner = user(1L, "Owner", "owner");
+        User participant = user(2L, "Participant", "participant");
+        Exam exam = exam(900L, owner, "Exam concurrente");
+        ExamMembership membership = new ExamMembership();
+        membership.setExam(exam);
+        membership.setUser(participant);
+        membership.setRole("viewer");
+        membership.setCanStartGroup(Boolean.FALSE);
+        setBaseFields(membership, 901L);
+
+        ExamGroupSession session = groupSession(910L, exam, owner, "waiting", null, 0, 0);
+        session.setStartedAt(null);
+        session.setCurrentQuestionStartedAt(null);
+        session.setPhase("open");
+        session.setPhaseStartedAt(null);
+        session.setPhaseEndsAt(null);
+
+        ExamGroupSessionMember ownerMember = sessionMember(session, owner, true);
+        ExamGroupSessionMember participantMember = sessionMember(session, participant, true);
+
+        when(userRepository.findById(participant.getId())).thenReturn(Optional.of(participant));
+        when(examRepository.findByIdAndDeletedAtIsNull(exam.getId())).thenReturn(Optional.of(exam));
+        when(examMembershipRepository.findByExamIdAndUserIdAndDeletedAtIsNull(exam.getId(), participant.getId()))
+                .thenReturn(Optional.of(membership));
+        when(examGroupSessionRepository
+                .findTopByExamIdAndDeletedAtIsNullAndStatusInOrderByCreatedAtDesc(exam.getId(), List.of("waiting", "active")))
+                .thenReturn(Optional.of(session));
+        when(examGroupSessionMemberRepository.findBySessionIdAndDeletedAtIsNullOrderByCreatedAtAsc(session.getId()))
+                .thenReturn(List.of(ownerMember, participantMember));
+        when(examGroupSessionMemberRepository
+                .findBySessionIdAndUserIdAndDeletedAtIsNull(session.getId(), participant.getId()))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(participantMember));
+        when(examMembershipRepository.findByExamIdAndDeletedAtIsNullOrderByCreatedAtAsc(exam.getId()))
+                .thenReturn(List.of(membership));
+
+        when(examGroupSessionMemberRepository.save(any(ExamGroupSessionMember.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate member"))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ExamGroupStateResponse state = assertDoesNotThrow(
+                () -> service.join(exam.getId(), new com.bardales.SmartLearnApi.dto.exam.ExamGroupJoinRequest(participant.getId())));
+
+        assertEquals("waiting", state.status());
+        assertEquals(session.getId(), state.sessionId());
     }
 
     private Fixture fixtureReviewSession(boolean lastQuestion) {
