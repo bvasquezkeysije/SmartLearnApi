@@ -634,6 +634,9 @@ public class CourseService {
     public ExamSummaryResponse getCourseSessionContentExamSummary(
             Long courseId, Long sessionId, Long contentId, Long userId) {
         Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, userId);
+        // Garantiza que participantes del curso tengan acceso consistente al examen anclado
+        // antes de construir el resumen (incluye estado de sala grupal activa).
+        coursePracticeWriteService.ensureParticipantAnchoredExamMembership(sourceExam, userId);
         return examService.getExamSummary(sourceExam.getId(), userId);
     }
 

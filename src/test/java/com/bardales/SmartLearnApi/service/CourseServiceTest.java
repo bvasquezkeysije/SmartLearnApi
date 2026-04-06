@@ -439,6 +439,8 @@ class CourseServiceTest {
 
         assertEquals(400L, response.id());
         assertEquals("Examen anclado", response.name());
+        verify(coursePracticeWriteService, times(1))
+                .ensureParticipantAnchoredExamMembership(eq(fixture.exam), eq(1L));
         verify(examService).getExamSummary(400L, 1L);
         verify(examService, never()).upsertExamMembership(
                 any(Exam.class), any(User.class), any(String.class), any(Boolean.class), any(Boolean.class), any(Boolean.class));
