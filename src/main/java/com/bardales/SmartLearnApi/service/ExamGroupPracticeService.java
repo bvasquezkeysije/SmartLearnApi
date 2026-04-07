@@ -1163,12 +1163,14 @@ public class ExamGroupPracticeService {
         }
         List<ExamGroupSessionMember> members =
                 examGroupSessionMemberRepository.findBySessionIdAndDeletedAtIsNullOrderByCreatedAtAsc(sessionId);
-        List<Long> connectedUserIds = members.stream()
-                .filter(member -> Boolean.TRUE.equals(member.getConnected()))
+        // Regla de negocio: para cerrar una pregunta por "todos respondieron",
+        // se exige respuesta de todos los integrantes de la sala.
+        // No se debe adelantar solo porque algun miembro quede temporalmente desconectado.
+        List<Long> participantUserIds = members.stream()
                 .map(member -> member.getUser() == null ? null : member.getUser().getId())
                 .filter(userId -> userId != null)
                 .toList();
-        if (connectedUserIds.isEmpty()) {
+        if (participantUserIds.isEmpty()) {
             return false;
         }
         Map<Long, ExamGroupSessionAnswer> answerByUserId = new HashMap<>();
@@ -1182,8 +1184,8 @@ public class ExamGroupPracticeService {
                 answerByUserId.put(userId, answer);
             }
         }
-        for (Long connectedUserId : connectedUserIds) {
-            ExamGroupSessionAnswer answer = answerByUserId.get(connectedUserId);
+        for (Long participantUserId : participantUserIds) {
+            ExamGroupSessionAnswer answer = answerByUserId.get(participantUserId);
             if (answer == null || trimOrNull(answer.getSelectedAnswer()) == null) {
                 return false;
             }
