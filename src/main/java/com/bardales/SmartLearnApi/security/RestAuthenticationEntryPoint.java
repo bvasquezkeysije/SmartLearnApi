@@ -36,6 +36,7 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
         body.put("status", HttpServletResponse.SC_UNAUTHORIZED);
         body.put("error", "No autorizado");
         body.put("message", "Token ausente o invalido");
+        body.put("authError", true);
 
         response.getWriter().write(objectMapper.writeValueAsString(body));
     }
