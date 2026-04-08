@@ -30,14 +30,18 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(restAuthenticationEntryPoint))
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/api/v1/admin/**")
+                        .hasRole("ADMIN")
                         .requestMatchers(
                                 "/",
                                 "/index.html",
                                 "/favicon.ico",
                                 "/error",
                                 "/api/v1/auth/login",
+                                "/api/v1/auth/register",
                                 "/api/v1/auth/google/login",
                                 "/api/v1/auth/google/register",
+                                "/api/v1/public/mobile/android/latest",
                                 "/api/v1/health",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",

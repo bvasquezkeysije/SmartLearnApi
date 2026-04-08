@@ -3,6 +3,8 @@ package com.bardales.SmartLearnApi.controller;
 import com.bardales.SmartLearnApi.dto.auth.GoogleLoginRequest;
 import com.bardales.SmartLearnApi.dto.auth.GoogleLoginResponse;
 import com.bardales.SmartLearnApi.dto.auth.GoogleRegisterRequest;
+import com.bardales.SmartLearnApi.dto.auth.LocalRegisterRequest;
+import com.bardales.SmartLearnApi.dto.auth.LocalRegisterResponse;
 import com.bardales.SmartLearnApi.dto.auth.LoginRequest;
 import com.bardales.SmartLearnApi.dto.auth.LoginResponse;
 import com.bardales.SmartLearnApi.dto.auth.PresenceHeartbeatResponse;
@@ -40,6 +42,11 @@ public class AuthController {
     @PostMapping("/google/register")
     public LoginResponse registerWithGoogle(@Valid @RequestBody GoogleRegisterRequest request) {
         return authService.registerWithGoogle(request);
+    }
+
+    @PostMapping("/register")
+    public LocalRegisterResponse registerLocal(@Valid @RequestBody LocalRegisterRequest request) {
+        return authService.registerLocal(request);
     }
 
     @GetMapping("/session")

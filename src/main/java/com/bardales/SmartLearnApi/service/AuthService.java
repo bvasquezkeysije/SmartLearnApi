@@ -6,6 +6,8 @@ import com.bardales.SmartLearnApi.domain.repository.UserRepository;
 import com.bardales.SmartLearnApi.dto.auth.GoogleLoginRequest;
 import com.bardales.SmartLearnApi.dto.auth.GoogleLoginResponse;
 import com.bardales.SmartLearnApi.dto.auth.GoogleRegisterRequest;
+import com.bardales.SmartLearnApi.dto.auth.LocalRegisterRequest;
+import com.bardales.SmartLearnApi.dto.auth.LocalRegisterResponse;
 import com.bardales.SmartLearnApi.dto.auth.LoginRequest;
 import com.bardales.SmartLearnApi.dto.auth.LoginResponse;
 import com.bardales.SmartLearnApi.dto.auth.PresenceHeartbeatResponse;
@@ -87,6 +89,53 @@ public class AuthService {
         }
 
         return buildLoginResponse(user);
+    }
+
+    @Transactional
+    public LocalRegisterResponse registerLocal(LocalRegisterRequest request) {
+        String normalizedEmail = normalizeEmail(request.email());
+        String normalizedUsername = normalizeUsername(request.username());
+        String normalizedName = normalizeName(request.name(), normalizedUsername);
+        validateRegisterPassword(request.password(), request.confirmPassword());
+
+        if (normalizedUsername.length() < 3) {
+            throw new BadRequestException("El username debe tener al menos 3 caracteres validos.");
+        }
+        if (userRepository.existsByEmailIgnoreCase(normalizedEmail)) {
+            throw new BadRequestException("El correo ya esta registrado.");
+        }
+        if (userRepository.existsByUsernameIgnoreCase(normalizedUsername)) {
+            throw new BadRequestException("El username ya esta en uso.");
+        }
+
+        User user = new User();
+        user.setName(normalizedName);
+        user.setUsername(normalizedUsername);
+        user.setEmail(normalizedEmail);
+        user.setPassword(passwordEncoder.encode(request.password()));
+        user.setStatus(1);
+        user.setAuthProvider("local");
+        user.setHasLocalPassword(true);
+        user.setEmailVerifiedAt(LocalDateTime.now());
+        roleRepository.findByNameIgnoreCase("user").ifPresent(role -> user.getRoles().add(role));
+
+        User saved = userRepository.save(user);
+        LoginResponse login = buildLoginResponse(saved);
+        return new LocalRegisterResponse(
+                login.id(),
+                login.name(),
+                login.username(),
+                login.email(),
+                login.status(),
+                login.roles(),
+                login.token(),
+                login.authProvider(),
+                login.hasLocalPassword(),
+                "Usuario registrado correctamente.",
+                login.profileImageData(),
+                login.profileImageScale(),
+                login.profileImageOffsetX(),
+                login.profileImageOffsetY());
     }
 
     @Transactional(readOnly = true)
@@ -311,9 +360,7 @@ public class AuthService {
                 .sorted(String.CASE_INSENSITIVE_ORDER)
                 .toList();
         if (roles.isEmpty()) {
-            boolean isAdminUser = "admin".equalsIgnoreCase(user.getUsername())
-                    || "admin@a21k.com".equalsIgnoreCase(user.getEmail());
-            roles = isAdminUser ? List.of("admin") : List.of("user");
+            roles = List.of("user");
         }
         return roles;
     }
@@ -561,6 +608,39 @@ public class AuthService {
         }
         String raw = asString(value);
         return "true".equalsIgnoreCase(raw) || "1".equals(raw);
+    }
+
+    private String normalizeEmail(String email) {
+        String normalized = email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
+        if (normalized.isBlank()) {
+            throw new BadRequestException("El email es obligatorio.");
+        }
+        return normalized;
+    }
+
+    private String normalizeName(String name, String fallbackUsername) {
+        String normalized = name == null ? "" : name.trim();
+        if (!normalized.isBlank()) {
+            return normalized;
+        }
+        if (fallbackUsername == null || fallbackUsername.isBlank()) {
+            throw new BadRequestException("El nombre es obligatorio.");
+        }
+        return fallbackUsername;
+    }
+
+    private void validateRegisterPassword(String password, String confirmPassword) {
+        String rawPassword = password == null ? "" : password;
+        if (rawPassword.length() < 8) {
+            throw new BadRequestException("La password debe tener al menos 8 caracteres.");
+        }
+        String rawConfirmPassword = confirmPassword == null ? "" : confirmPassword;
+        if (rawConfirmPassword.isBlank()) {
+            throw new BadRequestException("Confirmar password es obligatorio.");
+        }
+        if (!rawPassword.equals(rawConfirmPassword)) {
+            throw new BadRequestException("Las passwords no coinciden.");
+        }
     }
 
     private record GoogleIdentity(

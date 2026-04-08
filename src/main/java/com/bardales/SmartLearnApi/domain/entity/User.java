@@ -221,6 +221,12 @@ public class User extends BaseEntity {
     }
 
     public boolean hasRole(String role) {
-        return roles.stream().anyMatch(r -> r.getName().equalsIgnoreCase(role));
+        if (role == null || role.isBlank()) {
+            return false;
+        }
+        return roles.stream()
+                .map(Role::getName)
+                .filter(name -> name != null && !name.isBlank())
+                .anyMatch(name -> name.equalsIgnoreCase(role));
     }
 }
