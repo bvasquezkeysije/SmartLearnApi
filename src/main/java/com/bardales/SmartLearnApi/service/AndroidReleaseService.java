@@ -11,18 +11,25 @@ import com.bardales.SmartLearnApi.exception.BadRequestException;
 import com.bardales.SmartLearnApi.exception.NotFoundException;
 import com.bardales.SmartLearnApi.exception.UnauthorizedException;
 import java.util.List;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class AndroidReleaseService {
 
     private final AndroidReleaseRepository androidReleaseRepository;
     private final UserRepository userRepository;
+    private final AndroidReleaseStorageService androidReleaseStorageService;
 
-    public AndroidReleaseService(AndroidReleaseRepository androidReleaseRepository, UserRepository userRepository) {
+    public AndroidReleaseService(
+            AndroidReleaseRepository androidReleaseRepository,
+            UserRepository userRepository,
+            AndroidReleaseStorageService androidReleaseStorageService) {
         this.androidReleaseRepository = androidReleaseRepository;
         this.userRepository = userRepository;
+        this.androidReleaseStorageService = androidReleaseStorageService;
     }
 
     @Transactional(readOnly = true)
@@ -72,6 +79,52 @@ public class AndroidReleaseService {
     }
 
     @Transactional
+    public AndroidReleaseResponse createReleaseFromUpload(
+            Long requesterUserId,
+            String versionNameInput,
+            Integer versionCodeInput,
+            String checksumSha256Input,
+            String releaseNotesInput,
+            Boolean isActiveInput,
+            MultipartFile apkFile) {
+        User requester = requireAdmin(requesterUserId);
+        String versionName = normalizeRequired(versionNameInput, "versionName es obligatorio");
+        Integer versionCode = versionCodeInput;
+        if (versionCode == null || versionCode < 1) {
+            throw new BadRequestException("versionCode debe ser mayor a 0");
+        }
+
+        AndroidReleaseStorageService.StoredApk storedApk = androidReleaseStorageService.storeApk(apkFile);
+        String storageKey = storedApk.storageKey();
+        try {
+            AndroidRelease release = new AndroidRelease();
+            release.setVersionName(versionName);
+            release.setVersionCode(versionCode);
+            release.setApkUrl("pending://upload");
+            release.setFileName(storedApk.fileName());
+            release.setFileSizeBytes(storedApk.fileSizeBytes());
+            release.setContentType(storedApk.contentType());
+            release.setStorageKey(storageKey);
+            release.setChecksumSha256(normalizeOptional(checksumSha256Input));
+            release.setReleaseNotes(normalizeOptional(releaseNotesInput));
+            release.setCreatedByUser(requester);
+            release.setIsActive(Boolean.TRUE.equals(isActiveInput));
+
+            if (Boolean.TRUE.equals(release.getIsActive())) {
+                deactivateCurrentActiveRelease();
+            }
+
+            AndroidRelease saved = androidReleaseRepository.save(release);
+            saved.setApkUrl(buildDownloadUrl(saved.getId()));
+            AndroidRelease updated = androidReleaseRepository.save(saved);
+            return toResponse(updated);
+        } catch (RuntimeException ex) {
+            androidReleaseStorageService.deleteIfExists(storageKey);
+            throw ex;
+        }
+    }
+
+    @Transactional
     public AndroidReleaseActivateResponse activateRelease(Long requesterUserId, Long releaseId) {
         requireAdmin(requesterUserId);
         AndroidRelease target = androidReleaseRepository.findById(releaseId)
@@ -96,6 +149,24 @@ public class AndroidReleaseService {
                 saved.getVersionCode(),
                 true,
                 "Release activada correctamente.");
+    }
+
+    @Transactional(readOnly = true)
+    public AndroidReleaseFileDownload getPublicReleaseFile(Long releaseId) {
+        AndroidRelease release = androidReleaseRepository.findById(releaseId)
+                .orElseThrow(() -> new NotFoundException("Release no encontrada."));
+        if (!Boolean.TRUE.equals(release.getIsActive())) {
+            throw new NotFoundException("Archivo APK no disponible.");
+        }
+        String storageKey = normalizeOptional(release.getStorageKey());
+        if (storageKey == null) {
+            throw new NotFoundException("Archivo APK no disponible.");
+        }
+        Resource resource = androidReleaseStorageService.loadAsResource(storageKey);
+        return new AndroidReleaseFileDownload(
+                resource,
+                normalizeOptional(release.getContentType()),
+                normalizeOptional(release.getFileName()));
     }
 
     private void deactivateCurrentActiveRelease() {
@@ -133,15 +204,28 @@ public class AndroidReleaseService {
 
     private AndroidReleaseResponse toResponse(AndroidRelease release) {
         Long createdByUserId = release.getCreatedByUser() == null ? null : release.getCreatedByUser().getId();
+        String resolvedApkUrl = normalizeOptional(release.getApkUrl());
+        if (resolvedApkUrl == null && normalizeOptional(release.getStorageKey()) != null && release.getId() != null) {
+            resolvedApkUrl = buildDownloadUrl(release.getId());
+        }
         return new AndroidReleaseResponse(
                 release.getId(),
                 release.getVersionName(),
                 release.getVersionCode(),
-                release.getApkUrl(),
+                resolvedApkUrl,
+                release.getFileName(),
+                release.getFileSizeBytes(),
                 release.getChecksumSha256(),
                 release.getReleaseNotes(),
                 Boolean.TRUE.equals(release.getIsActive()),
                 createdByUserId,
                 release.getCreatedAt());
+    }
+
+    private String buildDownloadUrl(Long releaseId) {
+        return "/api/v1/public/mobile/android/releases/" + releaseId + "/download";
+    }
+
+    public record AndroidReleaseFileDownload(Resource resource, String contentType, String fileName) {
     }
 }

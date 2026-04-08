@@ -21,6 +21,18 @@ public class AndroidRelease extends BaseEntity {
     @Column(name = "apk_url", nullable = false)
     private String apkUrl;
 
+    @Column(name = "file_name")
+    private String fileName;
+
+    @Column(name = "file_size_bytes")
+    private Long fileSizeBytes;
+
+    @Column(name = "content_type")
+    private String contentType;
+
+    @Column(name = "storage_key")
+    private String storageKey;
+
     @Column(name = "checksum_sha256")
     private String checksumSha256;
 
@@ -64,6 +76,38 @@ public class AndroidRelease extends BaseEntity {
 
     public void setChecksumSha256(String checksumSha256) {
         this.checksumSha256 = checksumSha256;
+    }
+
+    public String getFileName() {
+        return fileName;
+    }
+
+    public void setFileName(String fileName) {
+        this.fileName = fileName;
+    }
+
+    public Long getFileSizeBytes() {
+        return fileSizeBytes;
+    }
+
+    public void setFileSizeBytes(Long fileSizeBytes) {
+        this.fileSizeBytes = fileSizeBytes;
+    }
+
+    public String getContentType() {
+        return contentType;
+    }
+
+    public void setContentType(String contentType) {
+        this.contentType = contentType;
+    }
+
+    public String getStorageKey() {
+        return storageKey;
+    }
+
+    public void setStorageKey(String storageKey) {
+        this.storageKey = storageKey;
     }
 
     public String getReleaseNotes() {

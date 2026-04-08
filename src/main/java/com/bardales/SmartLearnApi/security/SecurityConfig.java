@@ -42,6 +42,7 @@ public class SecurityConfig {
                                 "/api/v1/auth/google/login",
                                 "/api/v1/auth/google/register",
                                 "/api/v1/public/mobile/android/latest",
+                                "/api/v1/public/mobile/android/releases/*/download",
                                 "/api/v1/health",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",

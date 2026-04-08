@@ -7,6 +7,8 @@ public record AndroidReleaseResponse(
         String versionName,
         Integer versionCode,
         String apkUrl,
+        String fileName,
+        Long fileSizeBytes,
         String checksumSha256,
         String releaseNotes,
         Boolean isActive,

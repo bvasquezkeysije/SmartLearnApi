@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockMultipartFile;
 
 @ExtendWith(MockitoExtension.class)
 class AndroidReleaseServiceTest {
@@ -34,11 +35,14 @@ class AndroidReleaseServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private AndroidReleaseStorageService androidReleaseStorageService;
+
     private AndroidReleaseService androidReleaseService;
 
     @BeforeEach
     void setUp() {
-        androidReleaseService = new AndroidReleaseService(androidReleaseRepository, userRepository);
+        androidReleaseService = new AndroidReleaseService(androidReleaseRepository, userRepository, androidReleaseStorageService);
     }
 
     @Test
@@ -118,6 +122,47 @@ class AndroidReleaseServiceTest {
         when(userRepository.findById(3L)).thenReturn(Optional.of(legacyAdmin));
 
         assertThrows(UnauthorizedException.class, () -> androidReleaseService.listAllForAdmin(3L));
+    }
+
+    @Test
+    void createReleaseFromUploadBuildsDownloadUrl() {
+        User admin = buildAdminUser(1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(admin));
+        when(androidReleaseRepository.findByIsActiveTrue()).thenReturn(Optional.empty());
+
+        MockMultipartFile apkFile = new MockMultipartFile(
+                "apkFile",
+                "smartlearn.apk",
+                "application/vnd.android.package-archive",
+                new byte[] {1, 2, 3});
+        AndroidReleaseStorageService.StoredApk storedApk = new AndroidReleaseStorageService.StoredApk(
+                "stored-key.apk",
+                "smartlearn.apk",
+                3L,
+                "application/vnd.android.package-archive");
+        when(androidReleaseStorageService.storeApk(apkFile)).thenReturn(storedApk);
+
+        when(androidReleaseRepository.save(any(AndroidRelease.class))).thenAnswer(invocation -> {
+            AndroidRelease release = invocation.getArgument(0);
+            if (release.getId() == null) {
+                org.springframework.test.util.ReflectionTestUtils.setField(release, "id", 77L);
+            }
+            return release;
+        });
+
+        AndroidReleaseResponse response = androidReleaseService.createReleaseFromUpload(
+                1L,
+                "1.0.0",
+                100,
+                null,
+                "Upload release",
+                true,
+                apkFile);
+
+        assertEquals(77L, response.id());
+        assertEquals("/api/v1/public/mobile/android/releases/77/download", response.apkUrl());
+        assertEquals("smartlearn.apk", response.fileName());
+        assertEquals(3L, response.fileSizeBytes());
     }
 
     private User buildAdminUser(Long id) {
