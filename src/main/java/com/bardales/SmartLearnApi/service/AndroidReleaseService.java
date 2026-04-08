@@ -6,6 +6,7 @@ import com.bardales.SmartLearnApi.domain.repository.AndroidReleaseRepository;
 import com.bardales.SmartLearnApi.domain.repository.UserRepository;
 import com.bardales.SmartLearnApi.dto.mobile.AndroidReleaseActivateResponse;
 import com.bardales.SmartLearnApi.dto.mobile.AndroidReleaseCreateRequest;
+import com.bardales.SmartLearnApi.dto.mobile.AndroidReleaseDeleteResponse;
 import com.bardales.SmartLearnApi.dto.mobile.AndroidReleaseResponse;
 import com.bardales.SmartLearnApi.exception.BadRequestException;
 import com.bardales.SmartLearnApi.exception.NotFoundException;
@@ -15,9 +16,13 @@ import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class AndroidReleaseService {
+
+    private static final Logger log = LoggerFactory.getLogger(AndroidReleaseService.class);
 
     private final AndroidReleaseRepository androidReleaseRepository;
     private final UserRepository userRepository;
@@ -149,6 +154,26 @@ public class AndroidReleaseService {
                 saved.getVersionCode(),
                 true,
                 "Release activada correctamente.");
+    }
+
+    @Transactional
+    public AndroidReleaseDeleteResponse deleteRelease(Long requesterUserId, Long releaseId) {
+        requireAdmin(requesterUserId);
+        AndroidRelease target = androidReleaseRepository.findById(releaseId)
+                .orElseThrow(() -> new NotFoundException("Release no encontrada."));
+
+        String storageKey = normalizeOptional(target.getStorageKey());
+        androidReleaseRepository.delete(target);
+
+        if (storageKey != null) {
+            try {
+                androidReleaseStorageService.deleteIfExists(storageKey);
+            } catch (RuntimeException ex) {
+                log.warn("No se pudo eliminar archivo fisico APK para release {} con storageKey {}", releaseId, storageKey, ex);
+            }
+        }
+
+        return new AndroidReleaseDeleteResponse(releaseId, "Release eliminada correctamente.");
     }
 
     @Transactional(readOnly = true)

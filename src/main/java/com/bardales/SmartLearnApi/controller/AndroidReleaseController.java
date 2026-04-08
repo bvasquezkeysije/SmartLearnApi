@@ -2,6 +2,7 @@ package com.bardales.SmartLearnApi.controller;
 
 import com.bardales.SmartLearnApi.dto.mobile.AndroidReleaseActivateResponse;
 import com.bardales.SmartLearnApi.dto.mobile.AndroidReleaseCreateRequest;
+import com.bardales.SmartLearnApi.dto.mobile.AndroidReleaseDeleteResponse;
 import com.bardales.SmartLearnApi.dto.mobile.AndroidReleaseResponse;
 import com.bardales.SmartLearnApi.security.JwtUserPrincipal;
 import com.bardales.SmartLearnApi.service.AndroidReleaseService;
@@ -13,6 +14,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -86,5 +88,12 @@ public class AndroidReleaseController {
             @AuthenticationPrincipal JwtUserPrincipal principal,
             @PathVariable Long releaseId) {
         return androidReleaseService.activateRelease(principal.userId(), releaseId);
+    }
+
+    @DeleteMapping("/api/v1/admin/mobile/android/releases/{releaseId}")
+    public AndroidReleaseDeleteResponse deleteRelease(
+            @AuthenticationPrincipal JwtUserPrincipal principal,
+            @PathVariable Long releaseId) {
+        return androidReleaseService.deleteRelease(principal.userId(), releaseId);
     }
 }
