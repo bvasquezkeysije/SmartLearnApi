@@ -23,6 +23,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
@@ -37,6 +39,7 @@ public class AuthService {
 
     private static final String DEFAULT_GOOGLE_CLIENT_ID =
             "441996631829-cvhr6craa4kc3mbltlvcol2jbjsaeqi2.apps.googleusercontent.com";
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
@@ -52,17 +55,35 @@ public class AuthService {
             BCryptPasswordEncoder passwordEncoder,
             JwtService jwtService,
             @Value("${app.auth.google.client-id:}") String googleClientId) {
+        this(
+            userRepository,
+            roleRepository,
+            passwordEncoder,
+            jwtService,
+            googleClientId,
+            RestClient.builder()
+                .baseUrl("https://oauth2.googleapis.com")
+                .build(),
+            RestClient.builder()
+                .baseUrl("https://www.googleapis.com")
+                .build());
+        }
+
+        AuthService(
+            UserRepository userRepository,
+            RoleRepository roleRepository,
+            BCryptPasswordEncoder passwordEncoder,
+            JwtService jwtService,
+            String googleClientId,
+            RestClient googleRestClient,
+            RestClient googleUserInfoRestClient) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.googleClientId = resolveGoogleClientId(googleClientId);
-        this.googleRestClient = RestClient.builder()
-                .baseUrl("https://oauth2.googleapis.com")
-                .build();
-        this.googleUserInfoRestClient = RestClient.builder()
-                .baseUrl("https://www.googleapis.com")
-                .build();
+        this.googleRestClient = googleRestClient;
+        this.googleUserInfoRestClient = googleUserInfoRestClient;
     }
 
     private String resolveGoogleClientId(String googleClientId) {
@@ -483,26 +504,62 @@ public class AuthService {
             }
         }
 
-        Map<String, Object> userInfo;
+        Map<String, Object> resolvedUserInfo = Map.of();
+        boolean useTokenInfoFallback = false;
+        boolean firstAttemptFailedByException = false;
+
         try {
-            userInfo = googleUserInfoRestClient
-                    .get()
-                    .uri("/oauth2/v3/userinfo")
-                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
-                    .retrieve()
-                    .body(new ParameterizedTypeReference<Map<String, Object>>() {
-                    });
+            resolvedUserInfo = fetchGoogleUserInfo(accessToken);
         } catch (RestClientException ex) {
-            throw new UnauthorizedException("No se pudo obtener el perfil de Google.");
+            firstAttemptFailedByException = true;
+            log.warn("Google userinfo fallo en primer intento; reintentando una vez. causa={}", ex.getMessage());
         }
 
-        if (userInfo == null || userInfo.isEmpty()) {
-            throw new UnauthorizedException("No se pudo obtener el perfil de Google.");
+        if (resolvedUserInfo.isEmpty()) {
+            if (!firstAttemptFailedByException) {
+                log.warn("Google userinfo devolvio vacio en primer intento; reintentando una vez.");
+            }
+            try {
+                resolvedUserInfo = fetchGoogleUserInfo(accessToken);
+            } catch (RestClientException ex) {
+                useTokenInfoFallback = true;
+                log.warn("Google userinfo fallo en reintento; usando fallback de tokeninfo. causa={}", ex.getMessage());
+            }
         }
 
-        String subject = asString(userInfo.get("sub"));
-        String email = asString(userInfo.get("email"));
-        boolean emailVerified = parseBoolean(userInfo.get("email_verified"));
+        if (resolvedUserInfo.isEmpty()) {
+            useTokenInfoFallback = true;
+            if (!firstAttemptFailedByException) {
+                log.warn("Google userinfo no disponible tras reintento; usando fallback de tokeninfo.");
+            }
+        }
+
+        String subject;
+        String email;
+        boolean emailVerified;
+        String name;
+        String picture;
+
+        if (useTokenInfoFallback) {
+            subject = asString(tokenInfo.get("user_id"));
+            if (subject.isBlank()) {
+                subject = asString(tokenInfo.get("sub"));
+            }
+            email = asString(tokenInfo.get("email"));
+            Object verifiedField = tokenInfo.containsKey("verified_email")
+                    ? tokenInfo.get("verified_email")
+                    : tokenInfo.get("email_verified");
+            emailVerified = parseBoolean(verifiedField);
+            name = asString(tokenInfo.get("name"));
+            picture = null;
+        } else {
+            subject = asString(resolvedUserInfo.get("sub"));
+            email = asString(resolvedUserInfo.get("email"));
+            emailVerified = parseBoolean(resolvedUserInfo.get("email_verified"));
+            name = asString(resolvedUserInfo.get("name"));
+            picture = asString(resolvedUserInfo.get("picture"));
+        }
+
         if (subject.isBlank() || email.isBlank()) {
             throw new UnauthorizedException("Access token de Google invalido.");
         }
@@ -510,14 +567,27 @@ public class AuthService {
             throw new UnauthorizedException("Tu correo de Google no esta verificado.");
         }
 
-        String name = asString(userInfo.get("name"));
         if (name.isBlank()) {
-            int at = email.indexOf('@');
-            name = at > 0 ? email.substring(0, at) : email;
+            name = deriveNameFromEmail(email);
         }
-        String picture = asString(userInfo.get("picture"));
 
         return new GoogleIdentity(subject, email, name, picture);
+    }
+
+    private String deriveNameFromEmail(String email) {
+        int at = email.indexOf('@');
+        return at > 0 ? email.substring(0, at) : email;
+    }
+
+    private Map<String, Object> fetchGoogleUserInfo(String accessToken) {
+        Map<String, Object> userInfo = googleUserInfoRestClient
+                .get()
+                .uri("/oauth2/v3/userinfo")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                .retrieve()
+                .body(new ParameterizedTypeReference<Map<String, Object>>() {
+                });
+        return userInfo == null ? Map.of() : userInfo;
     }
 
     private void linkGoogleIdentity(User user, GoogleIdentity identity) {
