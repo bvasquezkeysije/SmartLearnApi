@@ -145,7 +145,25 @@ public class ExamGroupPracticeService {
         session.setQuestionIds(null);
         session.setTotalQuestions(0);
         session.setCurrentQuestionIndex(0);
-        session = examGroupSessionRepository.save(session);
+        try {
+            session = examGroupSessionRepository.save(session);
+        } catch (DataIntegrityViolationException raceCondition) {
+            // Refuerzo de concurrencia: si dos clientes crean simultáneamente,
+            // recuperamos la sesión activa/espera que ganó la carrera.
+            ExamGroupSession concurrent = examGroupSessionRepository
+                    .findTopByExamIdAndDeletedAtIsNullAndStatusInOrderByCreatedAtDesc(
+                            examId, List.of("waiting", "active"))
+                    .orElseThrow(() -> raceCondition);
+            ensureSessionMember(concurrent, access.user());
+            concurrent = refreshSessionPresence(concurrent);
+            concurrent = syncSessionPhase(concurrent);
+
+            Long existingCreatorId = concurrent.getCreatedByUser() == null ? null : concurrent.getCreatedByUser().getId();
+            if (existingCreatorId != null && existingCreatorId.equals(access.user().getId())) {
+                return toGroupState(concurrent, access.user().getId(), access.canStartGroup());
+            }
+            throw new BadRequestException("Ya existe un repaso grupal creado para este examen. Debes unirte al existente.");
+        }
 
         ensureSessionMember(session, access.user());
         return toGroupState(session, access.user().getId(), access.canStartGroup());

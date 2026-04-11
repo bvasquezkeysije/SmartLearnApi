@@ -26,7 +26,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<Map<String, Object>> handleUnauthorized(UnauthorizedException ex) {
-        return build(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        Map<String, Object> extra = new LinkedHashMap<>();
+        // Solo la capa de seguridad (JwtAuthenticationFilter/AuthenticationEntryPoint)
+        // debe marcar authError=true. Las excepciones de negocio no deben disparar logout global.
+        extra.put("authError", false);
+        return build(HttpStatus.UNAUTHORIZED, ex.getMessage(), extra);
     }
 
     @ExceptionHandler(BadRequestException.class)
@@ -86,10 +90,17 @@ public class GlobalExceptionHandler {
     }
 
     private ResponseEntity<Map<String, Object>> build(HttpStatus status, String message) {
+        return build(status, message, null);
+    }
+
+    private ResponseEntity<Map<String, Object>> build(HttpStatus status, String message, Map<String, Object> extra) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("timestamp", LocalDateTime.now().toString());
         body.put("status", status.value());
         body.put("error", message);
+        if (extra != null && !extra.isEmpty()) {
+            body.putAll(extra);
+        }
         return ResponseEntity.status(status).body(body);
     }
 }
