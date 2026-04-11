@@ -158,8 +158,10 @@ public class CourseService {
                 .map(course -> toCourseResponse(course, preloadContext))
                 .toList();
 
-        // El endpoint principal de cursos ya no arrastra availableExams para reducir latencia inicial.
-        return new CourseModuleResponse(courses, List.of());
+        List<CourseExamItemResponse> availableExams = getModuleExams(userId);
+
+        // Compatibilidad temporal: mantenemos availableExams en v1 mientras los clientes migran a /module-exams.
+        return new CourseModuleResponse(courses, availableExams);
     }
 
     @Transactional(readOnly = true)
@@ -1406,10 +1408,6 @@ public class CourseService {
         return new ArrayList<>(examIds);
     }
 
-    private List<CourseParticipantItemResponse> buildCourseParticipants(Course course) {
-        return buildCourseParticipants(course, null);
-    }
-
     private List<CourseParticipantItemResponse> buildCourseParticipants(Course course, List<CourseMembership> preloadedMemberships) {
         List<CourseParticipantItemResponse> participants = new ArrayList<>();
 
@@ -1459,10 +1457,6 @@ public class CourseService {
                 : normalizeCourseMembershipRole(membership == null ? null : membership.getRole(), false);
         Long membershipId = membership == null ? null : membership.getId();
         return new CourseParticipantItemResponse(membershipId, user.getId(), name, username, email, role, owner, joinedAt);
-    }
-
-    private List<CourseCompetencyItemResponse> buildCourseCompetencies(Course course) {
-        return buildCourseCompetencies(course, null);
     }
 
     private List<CourseCompetencyItemResponse> buildCourseCompetencies(Course course, List<CourseCompetency> preloadedCompetencies) {
@@ -1606,14 +1600,6 @@ public class CourseService {
         }
     }
 
-    private CourseSessionItemResponse toCourseSessionItem(CourseSession session) {
-        return toCourseSessionItem(
-                session,
-                courseWeekRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(session.getId()),
-                courseSessionContentRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByContentOrderAscCreatedAtAsc(session.getId()),
-                Map.of());
-    }
-
     private CourseSessionItemResponse toCourseSessionItem(
             CourseSession session,
             List<CourseWeek> preloadedWeeks,
@@ -1654,10 +1640,6 @@ public class CourseService {
                 weeks,
                 contents,
                 session.getCreatedAt());
-    }
-
-    private CourseSessionContentItemResponse toCourseSessionContentItem(CourseSessionContent content) {
-        return toCourseSessionContentItem(content, Map.of());
     }
 
     private CourseSessionContentItemResponse toCourseSessionContentItem(CourseSessionContent content, Map<Long, Exam> examsById) {

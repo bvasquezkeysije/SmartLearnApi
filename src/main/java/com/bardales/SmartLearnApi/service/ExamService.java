@@ -156,6 +156,7 @@ public class ExamService {
                 examGroupSessionRepository.findByExamIdInAndDeletedAtIsNullAndStatusInOrderByExamIdAscCreatedAtDesc(
                     examIds,
                     List.of("waiting", "active")));
+        Map<Long, ExamAccess> accessByExamId = buildExamAccessByExamId(examsById.values(), requester.getId(), examIds);
 
         return examsById.values().stream()
                 .filter(exam -> !shouldHideLegacyShareClone(exam, requester.getId()))
@@ -167,6 +168,7 @@ public class ExamService {
             .map(exam -> toExamSummary(
                 exam,
                 requester.getId(),
+                accessByExamId.get(exam.getId()),
                 personalPracticeByExamId.getOrDefault(exam.getId(), 0L),
                 groupPracticeByExamId.getOrDefault(exam.getId(), 0L),
                 1L + membersByExamId.getOrDefault(exam.getId(), 0L),
@@ -1319,18 +1321,19 @@ public class ExamService {
         ExamGroupSession groupSession = examGroupSessionRepository
             .findTopByExamIdAndDeletedAtIsNullAndStatusInOrderByCreatedAtDesc(exam.getId(), List.of("waiting", "active"))
             .orElse(null);
-        return toExamSummary(exam, userId, personalPracticeCount, groupPracticeCount, participantsCount, groupSession);
+        return toExamSummary(exam, userId, null, personalPracticeCount, groupPracticeCount, participantsCount, groupSession);
         }
 
         private ExamSummaryResponse toExamSummary(
             Exam exam,
             Long userId,
+            ExamAccess precomputedAccess,
             long personalPracticeCount,
             long groupPracticeCount,
             long participantsCount,
             ExamGroupSession groupSession) {
         var createdAt = exam.getCreatedAt() != null ? exam.getCreatedAt() : exam.getUpdatedAt();
-        ExamAccess access = resolveExamAccess(exam.getId(), userId);
+        ExamAccess access = precomputedAccess != null ? precomputedAccess : resolveExamAccess(exam.getId(), userId);
         Long ownerUserId = exam.getUser() == null ? null : exam.getUser().getId();
         Long groupSessionId = groupSession == null ? null : groupSession.getId();
         String groupSessionStatus = groupSession == null ? null : groupSession.getStatus();
@@ -1362,6 +1365,50 @@ public class ExamService {
                 groupSessionStatus,
                 groupSessionCreatedByUserId,
                 createdAt);
+    }
+
+    private Map<Long, ExamAccess> buildExamAccessByExamId(Iterable<Exam> exams, Long userId, List<Long> examIds) {
+        if (examIds == null || examIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, ExamMembership> membershipByExamId = new HashMap<>();
+        for (ExamMembership membership : examMembershipRepository.findByExamIdInAndUserIdAndDeletedAtIsNull(examIds, userId)) {
+            if (membership == null || membership.getExam() == null || membership.getExam().getId() == null) {
+                continue;
+            }
+            membershipByExamId.put(membership.getExam().getId(), membership);
+        }
+
+        Map<Long, ExamAccess> accessByExamId = new HashMap<>();
+        for (Exam exam : exams) {
+            if (exam == null || exam.getId() == null) {
+                continue;
+            }
+            Long examId = exam.getId();
+            Long ownerUserId = exam.getUser() == null ? null : exam.getUser().getId();
+            if (ownerUserId != null && ownerUserId.equals(userId)) {
+                accessByExamId.put(examId, new ExamAccess(exam, true, "owner", true, true, true, true));
+                continue;
+            }
+
+            ExamMembership membership = membershipByExamId.get(examId);
+            if (membership != null) {
+                String role = normalizeExamRole(membership.getRole());
+                boolean canEdit = "editor".equals(role);
+                boolean canShare = Boolean.TRUE.equals(membership.getCanShare());
+                boolean canStartGroup = Boolean.TRUE.equals(membership.getCanStartGroup());
+                boolean canRenameExam = Boolean.TRUE.equals(membership.getCanRenameExam());
+                accessByExamId.put(examId, new ExamAccess(exam, false, role, canEdit, canShare, canStartGroup, canRenameExam));
+                continue;
+            }
+
+            if ("public".equals(normalizeExamVisibility(exam.getVisibility()))) {
+                accessByExamId.put(examId, new ExamAccess(exam, false, "viewer", false, false, false, false));
+            }
+        }
+
+        return accessByExamId;
     }
 
     private Map<Long, Long> toGroupedCountMap(List<Object[]> rows) {
