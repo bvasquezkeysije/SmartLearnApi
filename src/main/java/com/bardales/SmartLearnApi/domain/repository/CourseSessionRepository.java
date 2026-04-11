@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface CourseSessionRepository extends JpaRepository<CourseSession, Long> {
     List<CourseSession> findByCourseIdAndDeletedAtIsNullOrderByCreatedAtDesc(Long courseId);
+    List<CourseSession> findByCourseIdInAndDeletedAtIsNullOrderByCourseIdAscCreatedAtDesc(List<Long> courseIds);
 
     Optional<CourseSession> findByIdAndCourseIdAndDeletedAtIsNull(Long id, Long courseId);
 

@@ -8,6 +8,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface CourseWeekRepository extends JpaRepository<CourseWeek, Long> {
     List<CourseWeek> findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(Long courseSessionId);
 
+    List<CourseWeek> findByCourseSessionIdInAndDeletedAtIsNullOrderByCourseSessionIdAscWeekOrderAscCreatedAtAsc(
+            List<Long> courseSessionIds);
+
     List<CourseWeek> findByCourseSessionIdOrderByWeekOrderAscCreatedAtAsc(Long courseSessionId);
 
     Optional<CourseWeek> findByIdAndCourseSessionIdAndDeletedAtIsNull(Long id, Long courseSessionId);

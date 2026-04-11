@@ -121,6 +121,19 @@ class CourseServiceTest {
                 examService,
                 examGroupPracticeService,
                 coursePracticeWriteService);
+
+        lenient().when(courseSessionRepository.findByCourseIdInAndDeletedAtIsNullOrderByCourseIdAscCreatedAtDesc(anyList()))
+                .thenReturn(List.of());
+        lenient().when(courseWeekRepository.findByCourseSessionIdInAndDeletedAtIsNullOrderByCourseSessionIdAscWeekOrderAscCreatedAtAsc(anyList()))
+                .thenReturn(List.of());
+        lenient().when(courseSessionContentRepository.findByCourseSessionIdInAndDeletedAtIsNullOrderByCourseSessionIdAscContentOrderAscCreatedAtAsc(anyList()))
+                .thenReturn(List.of());
+        lenient().when(courseExamRepository.findByCourseIdInOrderByCourseIdAscCreatedAtAsc(anyList())).thenReturn(List.of());
+        lenient().when(courseMembershipRepository.findByCourseIdInAndDeletedAtIsNullOrderByCourseIdAscCreatedAtAsc(anyList()))
+                .thenReturn(List.of());
+        lenient().when(courseCompetencyRepository.findByCourseIdInAndDeletedAtIsNullOrderByCourseIdAscSortOrderAscCreatedAtAsc(anyList()))
+                .thenReturn(List.of());
+        lenient().when(examRepository.findByIdInAndDeletedAtIsNull(anyList())).thenReturn(List.of());
     }
 
     @Test

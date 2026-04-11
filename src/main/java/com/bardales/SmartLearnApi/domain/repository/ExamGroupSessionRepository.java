@@ -2,6 +2,7 @@ package com.bardales.SmartLearnApi.domain.repository;
 
 import com.bardales.SmartLearnApi.domain.entity.ExamGroupSession;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -12,6 +13,10 @@ public interface ExamGroupSessionRepository extends JpaRepository<ExamGroupSessi
 
     Optional<ExamGroupSession> findTopByExamIdAndDeletedAtIsNullAndStatusInOrderByCreatedAtDesc(
             Long examId, Collection<String> statuses);
+
+        List<ExamGroupSession> findByExamIdInAndDeletedAtIsNullAndStatusInOrderByExamIdAscCreatedAtDesc(
+            List<Long> examIds,
+            Collection<String> statuses);
 
         @Query(
                         """
@@ -26,4 +31,19 @@ public interface ExamGroupSessionRepository extends JpaRepository<ExamGroupSessi
                                     )
                         """)
         long countPracticedByExamId(@Param("examId") Long examId);
+
+        @Query(
+                        """
+                        select s.exam.id, count(s)
+                        from ExamGroupSession s
+                        where s.exam.id in :examIds
+                            and s.deletedAt is null
+                            and (
+                                        s.startedAt is not null
+                                        or s.finishedAt is not null
+                                        or lower(coalesce(s.status, '')) = 'finished'
+                                    )
+                        group by s.exam.id
+                        """)
+        List<Object[]> countPracticedByExamIdsGrouped(@Param("examIds") List<Long> examIds);
 }

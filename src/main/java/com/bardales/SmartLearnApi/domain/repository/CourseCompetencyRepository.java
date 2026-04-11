@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface CourseCompetencyRepository extends JpaRepository<CourseCompetency, Long> {
     List<CourseCompetency> findByCourseIdAndDeletedAtIsNullOrderBySortOrderAscCreatedAtAsc(Long courseId);
+    List<CourseCompetency> findByCourseIdInAndDeletedAtIsNullOrderByCourseIdAscSortOrderAscCreatedAtAsc(List<Long> courseIds);
     Optional<CourseCompetency> findByIdAndCourseIdAndDeletedAtIsNull(Long id, Long courseId);
 }
 

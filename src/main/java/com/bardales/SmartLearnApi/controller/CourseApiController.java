@@ -2,6 +2,7 @@ package com.bardales.SmartLearnApi.controller;
 
 import com.bardales.SmartLearnApi.dto.course.CourseCreateRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseCompetencySaveRequest;
+import com.bardales.SmartLearnApi.dto.course.CourseExamItemResponse;
 import com.bardales.SmartLearnApi.dto.course.CourseJoinRequest;
 import com.bardales.SmartLearnApi.dto.course.CourseJoinResponse;
 import com.bardales.SmartLearnApi.dto.course.CourseModuleResponse;
@@ -63,6 +64,11 @@ public class CourseApiController {
     @GetMapping
     public CourseModuleResponse getModule(@RequestParam Long userId) {
         return courseService.getModule(userId);
+    }
+
+    @GetMapping("/module-exams")
+    public List<CourseExamItemResponse> getModuleExams(@RequestParam Long userId) {
+        return courseService.getModuleExams(userId);
     }
 
     @PostMapping

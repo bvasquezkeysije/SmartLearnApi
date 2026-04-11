@@ -137,6 +137,26 @@ public class ExamService {
             examsById.putIfAbsent(exam.getId(), exam);
         }
 
+        List<Long> examIds = examsById.values().stream()
+            .map(Exam::getId)
+            .filter(id -> id != null && id > 0)
+            .toList();
+        Map<Long, Long> personalPracticeByExamId = examIds.isEmpty()
+            ? Map.of()
+            : toGroupedCountMap(examAttemptRepository.countByExamIdsAndUserIdGrouped(examIds, requester.getId()));
+        Map<Long, Long> groupPracticeByExamId = examIds.isEmpty()
+            ? Map.of()
+            : toGroupedCountMap(examGroupSessionRepository.countPracticedByExamIdsGrouped(examIds));
+        Map<Long, Long> membersByExamId = examIds.isEmpty()
+            ? Map.of()
+            : toGroupedCountMap(examMembershipRepository.countByExamIdsGrouped(examIds));
+        Map<Long, ExamGroupSession> latestActiveGroupSessionByExamId = examIds.isEmpty()
+            ? Map.of()
+            : toLatestGroupSessionMap(
+                examGroupSessionRepository.findByExamIdInAndDeletedAtIsNullAndStatusInOrderByExamIdAscCreatedAtDesc(
+                    examIds,
+                    List.of("waiting", "active")));
+
         return examsById.values().stream()
                 .filter(exam -> !shouldHideLegacyShareClone(exam, requester.getId()))
                 .sorted(Comparator
@@ -144,7 +164,13 @@ public class ExamService {
                                 (Exam exam) -> exam.getCreatedAt() != null ? exam.getCreatedAt() : exam.getUpdatedAt(),
                                 Comparator.nullsLast(Comparator.naturalOrder()))
                         .reversed())
-                .map(exam -> toExamSummary(exam, requester.getId()))
+            .map(exam -> toExamSummary(
+                exam,
+                requester.getId(),
+                personalPracticeByExamId.getOrDefault(exam.getId(), 0L),
+                groupPracticeByExamId.getOrDefault(exam.getId(), 0L),
+                1L + membersByExamId.getOrDefault(exam.getId(), 0L),
+                latestActiveGroupSessionByExamId.get(exam.getId())))
                 .toList();
     }
 
@@ -1287,15 +1313,25 @@ public class ExamService {
     }
 
     private ExamSummaryResponse toExamSummary(Exam exam, Long userId) {
-        var createdAt = exam.getCreatedAt() != null ? exam.getCreatedAt() : exam.getUpdatedAt();
         long personalPracticeCount = examAttemptRepository.countByExamIdAndUserId(exam.getId(), userId);
         long groupPracticeCount = examGroupSessionRepository.countPracticedByExamId(exam.getId());
-        ExamAccess access = resolveExamAccess(exam.getId(), userId);
-        Long ownerUserId = exam.getUser() == null ? null : exam.getUser().getId();
         long participantsCount = 1 + examMembershipRepository.countByExamIdAndDeletedAtIsNull(exam.getId());
         ExamGroupSession groupSession = examGroupSessionRepository
-                .findTopByExamIdAndDeletedAtIsNullAndStatusInOrderByCreatedAtDesc(exam.getId(), List.of("waiting", "active"))
-                .orElse(null);
+            .findTopByExamIdAndDeletedAtIsNullAndStatusInOrderByCreatedAtDesc(exam.getId(), List.of("waiting", "active"))
+            .orElse(null);
+        return toExamSummary(exam, userId, personalPracticeCount, groupPracticeCount, participantsCount, groupSession);
+        }
+
+        private ExamSummaryResponse toExamSummary(
+            Exam exam,
+            Long userId,
+            long personalPracticeCount,
+            long groupPracticeCount,
+            long participantsCount,
+            ExamGroupSession groupSession) {
+        var createdAt = exam.getCreatedAt() != null ? exam.getCreatedAt() : exam.getUpdatedAt();
+        ExamAccess access = resolveExamAccess(exam.getId(), userId);
+        Long ownerUserId = exam.getUser() == null ? null : exam.getUser().getId();
         Long groupSessionId = groupSession == null ? null : groupSession.getId();
         String groupSessionStatus = groupSession == null ? null : groupSession.getStatus();
         Long groupSessionCreatedByUserId = groupSession == null || groupSession.getCreatedByUser() == null
@@ -1326,6 +1362,34 @@ public class ExamService {
                 groupSessionStatus,
                 groupSessionCreatedByUserId,
                 createdAt);
+    }
+
+    private Map<Long, Long> toGroupedCountMap(List<Object[]> rows) {
+        if (rows == null || rows.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, Long> result = new HashMap<>();
+        for (Object[] row : rows) {
+            if (row == null || row.length < 2 || !(row[0] instanceof Number) || !(row[1] instanceof Number)) {
+                continue;
+            }
+            result.put(((Number) row[0]).longValue(), ((Number) row[1]).longValue());
+        }
+        return result;
+    }
+
+    private Map<Long, ExamGroupSession> toLatestGroupSessionMap(List<ExamGroupSession> sessions) {
+        if (sessions == null || sessions.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, ExamGroupSession> result = new HashMap<>();
+        for (ExamGroupSession session : sessions) {
+            if (session == null || session.getExam() == null || session.getExam().getId() == null) {
+                continue;
+            }
+            result.putIfAbsent(session.getExam().getId(), session);
+        }
+        return result;
     }
 
     private QuestionResponse toQuestionResponse(Question question) {

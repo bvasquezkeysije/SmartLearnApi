@@ -153,14 +153,22 @@ public class CourseService {
             coursesById.putIfAbsent(publicCourse.getId(), publicCourse);
         }
 
-        List<CourseResponse> courses = coursesById.values().stream().map(this::toCourseResponse).toList();
+        CourseModulePreloadContext preloadContext = buildCourseModulePreloadContext(coursesById.values());
+        List<CourseResponse> courses = coursesById.values().stream()
+                .map(course -> toCourseResponse(course, preloadContext))
+                .toList();
 
-        List<CourseExamItemResponse> availableExams = examService.listExams(userId)
+        // El endpoint principal de cursos ya no arrastra availableExams para reducir latencia inicial.
+        return new CourseModuleResponse(courses, List.of());
+    }
+
+    @Transactional(readOnly = true)
+    public List<CourseExamItemResponse> getModuleExams(Long userId) {
+        requireUser(userId);
+        return examService.listExams(userId)
                 .stream()
                 .map(this::toExamItem)
                 .toList();
-
-        return new CourseModuleResponse(courses, availableExams);
     }
 
     @Transactional
@@ -1175,21 +1183,42 @@ public class CourseService {
         return courseRepository.existsByCodeIgnoreCaseAndDeletedAtIsNullAndIdNot(code, excludingCourseId);
     }
 
-    private CourseResponse toCourseResponse(Course course) {
-        List<CourseSessionItemResponse> sessions = courseSessionRepository
-                .findByCourseIdAndDeletedAtIsNullOrderByCreatedAtDesc(course.getId())
-                .stream()
-                .map(this::toCourseSessionItem)
-                .toList();
+        private CourseResponse toCourseResponse(Course course) {
+        return toCourseResponse(course, CourseModulePreloadContext.empty());
+        }
 
-        List<CourseExamItemResponse> exams = courseExamRepository.findByCourseIdOrderByCreatedAtAsc(course.getId()).stream()
-                .map(CourseExam::getExam)
-                .filter(exam -> exam != null && exam.getDeletedAt() == null)
-                .map(this::toExamItem)
-                .toList();
+        private CourseResponse toCourseResponse(Course course, CourseModulePreloadContext preloadContext) {
+        List<CourseSession> rawSessions = preloadContext.sessionsByCourseId().getOrDefault(
+            course.getId(),
+            courseSessionRepository.findByCourseIdAndDeletedAtIsNullOrderByCreatedAtDesc(course.getId()));
+        List<CourseSessionItemResponse> sessions = rawSessions.stream()
+            .map(session -> toCourseSessionItem(
+                session,
+                preloadContext.weeksBySessionId().getOrDefault(
+                    session.getId(),
+                    courseWeekRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(session.getId())),
+                preloadContext.contentsBySessionId().getOrDefault(
+                    session.getId(),
+                    courseSessionContentRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByContentOrderAscCreatedAtAsc(session.getId())),
+                preloadContext.examsById()))
+            .toList();
 
-        List<CourseParticipantItemResponse> participants = buildCourseParticipants(course);
-        List<CourseCompetencyItemResponse> competencies = buildCourseCompetencies(course);
+        List<CourseExam> rawCourseExams = preloadContext.courseExamsByCourseId().getOrDefault(
+            course.getId(),
+            courseExamRepository.findByCourseIdOrderByCreatedAtAsc(course.getId()));
+        List<CourseExamItemResponse> exams = rawCourseExams.stream()
+            .map(CourseExam::getExam)
+            .map(exam -> exam == null ? null : preloadContext.examsById().getOrDefault(exam.getId(), exam))
+            .filter(exam -> exam != null && exam.getDeletedAt() == null)
+            .map(this::toExamItem)
+            .toList();
+
+        List<CourseParticipantItemResponse> participants = buildCourseParticipants(
+            course,
+            preloadContext.membershipsByCourseId().get(course.getId()));
+        List<CourseCompetencyItemResponse> competencies = buildCourseCompetencies(
+            course,
+            preloadContext.competenciesByCourseId().get(course.getId()));
         List<Long> resolvedExamIds = resolveCourseExamIds(exams, sessions);
         List<CourseGradeItemResponse> grades = buildCourseGrades(participants, resolvedExamIds);
 
@@ -1231,6 +1260,124 @@ public class CourseService {
                 course.getCreatedAt());
     }
 
+    private CourseModulePreloadContext buildCourseModulePreloadContext(Iterable<Course> courses) {
+        List<Long> courseIds = new ArrayList<>();
+        for (Course course : courses) {
+            if (course != null && course.getId() != null) {
+                courseIds.add(course.getId());
+            }
+        }
+        if (courseIds.isEmpty()) {
+            return CourseModulePreloadContext.empty();
+        }
+
+        List<CourseSession> sessions = courseSessionRepository
+                .findByCourseIdInAndDeletedAtIsNullOrderByCourseIdAscCreatedAtDesc(courseIds);
+        Map<Long, List<CourseSession>> sessionsByCourseId = new LinkedHashMap<>();
+        List<Long> sessionIds = new ArrayList<>();
+        for (CourseSession session : sessions) {
+            if (session == null || session.getCourse() == null || session.getCourse().getId() == null || session.getId() == null) {
+                continue;
+            }
+            sessionsByCourseId.computeIfAbsent(session.getCourse().getId(), ignored -> new ArrayList<>()).add(session);
+            sessionIds.add(session.getId());
+        }
+
+        List<CourseWeek> weeks = sessionIds.isEmpty()
+                ? List.of()
+                : courseWeekRepository.findByCourseSessionIdInAndDeletedAtIsNullOrderByCourseSessionIdAscWeekOrderAscCreatedAtAsc(sessionIds);
+        Map<Long, List<CourseWeek>> weeksBySessionId = new LinkedHashMap<>();
+        for (CourseWeek week : weeks) {
+            if (week == null || week.getCourseSession() == null || week.getCourseSession().getId() == null) {
+                continue;
+            }
+            weeksBySessionId.computeIfAbsent(week.getCourseSession().getId(), ignored -> new ArrayList<>()).add(week);
+        }
+
+        List<CourseSessionContent> contents = sessionIds.isEmpty()
+                ? List.of()
+                : courseSessionContentRepository
+                        .findByCourseSessionIdInAndDeletedAtIsNullOrderByCourseSessionIdAscContentOrderAscCreatedAtAsc(sessionIds);
+        Map<Long, List<CourseSessionContent>> contentsBySessionId = new LinkedHashMap<>();
+        Set<Long> referencedExamIds = new LinkedHashSet<>();
+        for (CourseSessionContent content : contents) {
+            if (content == null || content.getCourseSession() == null || content.getCourseSession().getId() == null) {
+                continue;
+            }
+            contentsBySessionId.computeIfAbsent(content.getCourseSession().getId(), ignored -> new ArrayList<>()).add(content);
+            if (content.getSourceExam() != null && content.getSourceExam().getId() != null) {
+                referencedExamIds.add(content.getSourceExam().getId());
+            }
+        }
+
+        List<CourseExam> courseExams = courseExamRepository.findByCourseIdInOrderByCourseIdAscCreatedAtAsc(courseIds);
+        Map<Long, List<CourseExam>> courseExamsByCourseId = new LinkedHashMap<>();
+        for (CourseExam courseExam : courseExams) {
+            if (courseExam == null || courseExam.getCourse() == null || courseExam.getCourse().getId() == null) {
+                continue;
+            }
+            courseExamsByCourseId.computeIfAbsent(courseExam.getCourse().getId(), ignored -> new ArrayList<>()).add(courseExam);
+            if (courseExam.getExam() != null && courseExam.getExam().getId() != null) {
+                referencedExamIds.add(courseExam.getExam().getId());
+            }
+        }
+
+        List<CourseMembership> memberships = courseMembershipRepository
+                .findByCourseIdInAndDeletedAtIsNullOrderByCourseIdAscCreatedAtAsc(courseIds);
+        Map<Long, List<CourseMembership>> membershipsByCourseId = new LinkedHashMap<>();
+        for (CourseMembership membership : memberships) {
+            if (membership == null || membership.getCourse() == null || membership.getCourse().getId() == null) {
+                continue;
+            }
+            membershipsByCourseId.computeIfAbsent(membership.getCourse().getId(), ignored -> new ArrayList<>()).add(membership);
+        }
+
+        List<CourseCompetency> competencies = courseCompetencyRepository
+                .findByCourseIdInAndDeletedAtIsNullOrderByCourseIdAscSortOrderAscCreatedAtAsc(courseIds);
+        Map<Long, List<CourseCompetency>> competenciesByCourseId = new LinkedHashMap<>();
+        for (CourseCompetency competency : competencies) {
+            if (competency == null || competency.getCourse() == null || competency.getCourse().getId() == null) {
+                continue;
+            }
+            competenciesByCourseId.computeIfAbsent(competency.getCourse().getId(), ignored -> new ArrayList<>()).add(competency);
+        }
+
+        Map<Long, Exam> examsById = referencedExamIds.isEmpty()
+                ? Map.of()
+                : examRepository.findByIdInAndDeletedAtIsNull(new ArrayList<>(referencedExamIds)).stream()
+                        .filter(exam -> exam != null && exam.getId() != null)
+                        .collect(LinkedHashMap::new, (map, exam) -> map.put(exam.getId(), exam), LinkedHashMap::putAll);
+
+        return new CourseModulePreloadContext(
+                sessionsByCourseId,
+                weeksBySessionId,
+                contentsBySessionId,
+                courseExamsByCourseId,
+                membershipsByCourseId,
+                competenciesByCourseId,
+                examsById);
+    }
+
+    private record CourseModulePreloadContext(
+            Map<Long, List<CourseSession>> sessionsByCourseId,
+            Map<Long, List<CourseWeek>> weeksBySessionId,
+            Map<Long, List<CourseSessionContent>> contentsBySessionId,
+            Map<Long, List<CourseExam>> courseExamsByCourseId,
+            Map<Long, List<CourseMembership>> membershipsByCourseId,
+            Map<Long, List<CourseCompetency>> competenciesByCourseId,
+            Map<Long, Exam> examsById) {
+        private static CourseModulePreloadContext empty() {
+            return new CourseModulePreloadContext(
+                    Map.of(),
+                    Map.of(),
+                    Map.of(),
+                    Map.of(),
+                    Map.of(),
+                    Map.of(),
+                    Map.of());
+        }
+    }
+
     private List<Long> resolveCourseExamIds(List<CourseExamItemResponse> exams, List<CourseSessionItemResponse> sessions) {
         Set<Long> examIds = new LinkedHashSet<>();
         for (CourseExamItemResponse exam : exams) {
@@ -1260,6 +1407,10 @@ public class CourseService {
     }
 
     private List<CourseParticipantItemResponse> buildCourseParticipants(Course course) {
+        return buildCourseParticipants(course, null);
+    }
+
+    private List<CourseParticipantItemResponse> buildCourseParticipants(Course course, List<CourseMembership> preloadedMemberships) {
         List<CourseParticipantItemResponse> participants = new ArrayList<>();
 
         User owner = course.getUser();
@@ -1267,8 +1418,9 @@ public class CourseService {
             participants.add(toCourseParticipantItem(owner, null, true, course.getCreatedAt()));
         }
 
-        List<CourseMembership> memberships =
-                courseMembershipRepository.findByCourseIdAndDeletedAtIsNullOrderByCreatedAtAsc(course.getId());
+        List<CourseMembership> memberships = preloadedMemberships != null
+            ? preloadedMemberships
+            : courseMembershipRepository.findByCourseIdAndDeletedAtIsNullOrderByCreatedAtAsc(course.getId());
         Long ownerUserId = owner == null ? null : owner.getId();
         for (CourseMembership membership : memberships) {
             if (membership == null) {
@@ -1310,9 +1462,14 @@ public class CourseService {
     }
 
     private List<CourseCompetencyItemResponse> buildCourseCompetencies(Course course) {
-        return courseCompetencyRepository
-                .findByCourseIdAndDeletedAtIsNullOrderBySortOrderAscCreatedAtAsc(course.getId())
-                .stream()
+        return buildCourseCompetencies(course, null);
+    }
+
+    private List<CourseCompetencyItemResponse> buildCourseCompetencies(Course course, List<CourseCompetency> preloadedCompetencies) {
+        List<CourseCompetency> competencies = preloadedCompetencies != null
+                ? preloadedCompetencies
+                : courseCompetencyRepository.findByCourseIdAndDeletedAtIsNullOrderBySortOrderAscCreatedAtAsc(course.getId());
+        return competencies.stream()
                 .map(this::toCourseCompetencyItem)
                 .toList();
     }
@@ -1450,18 +1607,27 @@ public class CourseService {
     }
 
     private CourseSessionItemResponse toCourseSessionItem(CourseSession session) {
+        return toCourseSessionItem(
+                session,
+                courseWeekRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(session.getId()),
+                courseSessionContentRepository.findByCourseSessionIdAndDeletedAtIsNullOrderByContentOrderAscCreatedAtAsc(session.getId()),
+                Map.of());
+    }
+
+    private CourseSessionItemResponse toCourseSessionItem(
+            CourseSession session,
+            List<CourseWeek> preloadedWeeks,
+            List<CourseSessionContent> preloadedContents,
+            Map<Long, Exam> examsById) {
         String normalizedSessionName = session.getName() == null ? "" : session.getName().trim();
         if (normalizedSessionName.isEmpty()) {
             normalizedSessionName = "Sesion";
         }
         String normalizedWeeklyContent = trimOrNull(session.getWeeklyContent());
-        List<CourseSessionContent> rawContents = courseSessionContentRepository
-                .findByCourseSessionIdAndDeletedAtIsNullOrderByContentOrderAscCreatedAtAsc(session.getId())
-                .stream()
-                .toList();
+        List<CourseSessionContent> rawContents = preloadedContents == null ? List.of() : preloadedContents;
         List<CourseSessionContentItemResponse> contents = rawContents
                 .stream()
-                .map(this::toCourseSessionContentItem)
+                .map(content -> toCourseSessionContentItem(content, examsById))
                 .toList();
         Map<Long, List<CourseSessionContentItemResponse>> contentsByWeekId = new LinkedHashMap<>();
         for (CourseSessionContentItemResponse content : contents) {
@@ -1471,9 +1637,8 @@ public class CourseService {
             }
             contentsByWeekId.computeIfAbsent(weekId, ignored -> new ArrayList<>()).add(content);
         }
-        List<CourseWeekItemResponse> weeks = courseWeekRepository
-                .findByCourseSessionIdAndDeletedAtIsNullOrderByWeekOrderAscCreatedAtAsc(session.getId())
-                .stream()
+        List<CourseWeekItemResponse> weeks = (preloadedWeeks == null ? List.<CourseWeek>of() : preloadedWeeks)
+            .stream()
                 .map(week -> new CourseWeekItemResponse(
                         week.getId(),
                         week.getWeekOrder(),
@@ -1492,7 +1657,14 @@ public class CourseService {
     }
 
     private CourseSessionContentItemResponse toCourseSessionContentItem(CourseSessionContent content) {
-        Exam sourceExam = content.getSourceExam();
+        return toCourseSessionContentItem(content, Map.of());
+    }
+
+    private CourseSessionContentItemResponse toCourseSessionContentItem(CourseSessionContent content, Map<Long, Exam> examsById) {
+        Exam sourceExam = null;
+        if (content.getSourceExam() != null && content.getSourceExam().getId() != null) {
+            sourceExam = examsById.getOrDefault(content.getSourceExam().getId(), content.getSourceExam());
+        }
         CourseWeek week = content.getCourseWeek();
         return new CourseSessionContentItemResponse(
                 content.getId(),
