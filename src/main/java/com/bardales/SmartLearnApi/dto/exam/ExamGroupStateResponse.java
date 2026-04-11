@@ -5,6 +5,7 @@ import java.util.List;
 
 public record ExamGroupStateResponse(
         Long sessionId,
+        String roomSessionToken,
         Long examId,
         String examName,
         String status,

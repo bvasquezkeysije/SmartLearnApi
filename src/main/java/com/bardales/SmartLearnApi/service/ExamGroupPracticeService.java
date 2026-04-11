@@ -28,6 +28,7 @@ import com.bardales.SmartLearnApi.dto.exam.QuestionResponse;
 import com.bardales.SmartLearnApi.exception.BadRequestException;
 import com.bardales.SmartLearnApi.exception.ForbiddenException;
 import com.bardales.SmartLearnApi.exception.NotFoundException;
+import com.bardales.SmartLearnApi.security.JwtUserPrincipal;
 import java.text.Normalizer;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -41,9 +42,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Comparator;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,6 +55,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ExamGroupPracticeService {
     // Equilibrio entre evitar "usuarios fantasma" y tolerar jitter de red.
     private static final long MEMBER_PRESENCE_TIMEOUT_SECONDS = 30;
+    private static final long ROOM_SESSION_TTL_MINUTES = 180;
     private static final String PHASE_OPEN = "open";
     private static final String PHASE_REVIEW = "review";
     private static final Logger log = LoggerFactory.getLogger(ExamGroupPracticeService.class);
@@ -104,10 +109,10 @@ public class ExamGroupPracticeService {
             throw new BadRequestException("No hay repaso grupal creado aun para este examen.");
         }
 
-        ensureSessionMember(session, access.user());
+        ExamGroupSessionMember requesterMember = ensureValidRoomSession(session, access.user(), request.roomSessionToken());
         session = refreshSessionPresence(session);
         session = syncSessionPhase(session);
-        return toGroupState(session, access.user().getId(), access.canStartGroup());
+        return toGroupState(session, access.user().getId(), access.canStartGroup(), requesterMember.getRoomSessionToken());
     }
 
     @Transactional
@@ -130,9 +135,10 @@ public class ExamGroupPracticeService {
         if (existing != null) {
             Long existingCreatorId = existing.getCreatedByUser() == null ? null : existing.getCreatedByUser().getId();
             if (existingCreatorId != null && existingCreatorId.equals(access.user().getId())) {
-                ensureSessionMember(existing, access.user());
+                ExamGroupSessionMember requesterMember = ensureValidRoomSession(existing, access.user(), request.roomSessionToken());
                 existing = refreshSessionPresence(existing);
-                return toGroupState(existing, access.user().getId(), access.canStartGroup());
+                return toGroupState(
+                        existing, access.user().getId(), access.canStartGroup(), requesterMember.getRoomSessionToken());
             }
             throw new BadRequestException("Ya existe un repaso grupal creado para este examen. Debes unirte al existente.");
         }
@@ -155,18 +161,20 @@ public class ExamGroupPracticeService {
                             examId, List.of("waiting", "active"))
                     .orElseThrow(() -> raceCondition);
             ensureSessionMember(concurrent, access.user());
+            ExamGroupSessionMember requesterMember = ensureValidRoomSession(concurrent, access.user(), request.roomSessionToken());
             concurrent = refreshSessionPresence(concurrent);
             concurrent = syncSessionPhase(concurrent);
 
             Long existingCreatorId = concurrent.getCreatedByUser() == null ? null : concurrent.getCreatedByUser().getId();
             if (existingCreatorId != null && existingCreatorId.equals(access.user().getId())) {
-                return toGroupState(concurrent, access.user().getId(), access.canStartGroup());
+                return toGroupState(
+                        concurrent, access.user().getId(), access.canStartGroup(), requesterMember.getRoomSessionToken());
             }
             throw new BadRequestException("Ya existe un repaso grupal creado para este examen. Debes unirte al existente.");
         }
 
-        ensureSessionMember(session, access.user());
-        return toGroupState(session, access.user().getId(), access.canStartGroup());
+        ExamGroupSessionMember requesterMember = ensureValidRoomSession(session, access.user(), request.roomSessionToken());
+        return toGroupState(session, access.user().getId(), access.canStartGroup(), requesterMember.getRoomSessionToken());
     }
 
     @Transactional
@@ -177,7 +185,7 @@ public class ExamGroupPracticeService {
         }
 
         ExamGroupSession session = requireSession(examId, request.sessionId());
-        ensureSessionMember(session, access.user());
+        ExamGroupSessionMember requesterMember = ensureValidRoomSession(session, access.user(), request.roomSessionToken());
         session = refreshSessionPresence(session);
 
         String status = normalizeStatus(session.getStatus());
@@ -185,7 +193,7 @@ public class ExamGroupPracticeService {
             throw new BadRequestException("Esta sesion grupal ya finalizo.");
         }
         if ("active".equals(status)) {
-            return toGroupState(session, access.user().getId(), access.canStartGroup());
+            return toGroupState(session, access.user().getId(), access.canStartGroup(), requesterMember.getRoomSessionToken());
         }
 
         List<ExamGroupSessionMember> members = examGroupSessionMemberRepository.findBySessionIdAndDeletedAtIsNullOrderByCreatedAtAsc(
@@ -221,18 +229,18 @@ public class ExamGroupPracticeService {
         session.setFinishedAt(null);
         session = examGroupSessionRepository.save(session);
 
-        return toGroupState(session, access.user().getId(), access.canStartGroup());
+        return toGroupState(session, access.user().getId(), access.canStartGroup(), requesterMember.getRoomSessionToken());
     }
 
     @Transactional
-    public ExamGroupStateResponse state(Long examId, Long sessionId, Long userId) {
+    public ExamGroupStateResponse state(Long examId, Long sessionId, Long userId, String roomSessionToken) {
         GroupAccess access = resolveGroupAccess(examId, userId);
         ExamGroupSession session = requireSession(examId, sessionId);
         requireSessionMemberReadAccess(session, access.user().getId());
 
         // Heartbeat de presencia: cada consulta de estado renueva conexion del usuario.
         // Esto evita que participantes activos se marquen como desconectados por timeout.
-        ensureSessionMember(session, access.user());
+        ExamGroupSessionMember requesterMember = ensureValidRoomSession(session, access.user(), roomSessionToken);
         session = refreshSessionPresence(session);
 
         // Si el cliente consulta una sesion finalizada, solo redirigir a una sala
@@ -246,14 +254,16 @@ public class ExamGroupPracticeService {
                     && !latestSession.getId().equals(session.getId())
                     && isNewerSessionSinceFinished(session, latestSession)
                     && hasExistingSessionMembership(latestSession, access.user().getId())) {
-                return toGroupState(latestSession, userId, access.canStartGroup());
+                ExamGroupSessionMember latestSessionMember = ensureValidRoomSession(latestSession, access.user(), null);
+                return toGroupState(
+                        latestSession, userId, access.canStartGroup(), latestSessionMember.getRoomSessionToken());
             }
         }
 
         // El servidor decide el avance por timeout de review, sin depender de clicks manuales.
         session = syncSessionPhase(session);
 
-        return toGroupState(session, userId, access.canStartGroup());
+        return toGroupState(session, userId, access.canStartGroup(), requesterMember.getRoomSessionToken());
     }
 
     private void requireSessionMemberReadAccess(ExamGroupSession session, Long userId) {
@@ -298,7 +308,7 @@ public class ExamGroupPracticeService {
     public ExamGroupStateResponse answer(Long examId, ExamGroupAnswerRequest request) {
         GroupAccess access = resolveGroupAccess(examId, request.userId());
         ExamGroupSession session = requireSession(examId, request.sessionId());
-        ensureSessionMember(session, access.user());
+        ExamGroupSessionMember requesterMember = ensureValidRoomSession(session, access.user(), request.roomSessionToken());
         session = refreshSessionPresence(session);
         session = syncSessionPhase(session);
 
@@ -346,7 +356,7 @@ public class ExamGroupPracticeService {
 
         // Nunca persistir envios vacios. Un timeout sin seleccion no cuenta como respuesta.
         if (trimOrNull(selectedAnswer) == null) {
-            return toGroupState(session, access.user().getId(), access.canStartGroup());
+            return toGroupState(session, access.user().getId(), access.canStartGroup(), requesterMember.getRoomSessionToken());
         }
 
         // Si llega un envio vacio (por ejemplo auto-envio tardio), no sobreescribir
@@ -357,7 +367,7 @@ public class ExamGroupPracticeService {
         answer.setAnsweredAt(LocalDateTime.now());
         examGroupSessionAnswerRepository.save(answer);
         session = syncSessionPhase(session);
-        return toGroupState(session, access.user().getId(), access.canStartGroup());
+        return toGroupState(session, access.user().getId(), access.canStartGroup(), requesterMember.getRoomSessionToken());
     }
 
     @Transactional
@@ -368,6 +378,7 @@ public class ExamGroupPracticeService {
         }
 
         ExamGroupSession session = requireSession(examId, request.sessionId());
+        ExamGroupSessionMember requesterMember = ensureValidRoomSession(session, access.user(), request.roomSessionToken());
         session = refreshSessionPresence(session);
         if (!"active".equals(normalizeStatus(session.getStatus()))) {
             throw new BadRequestException("La sesion grupal no esta activa.");
@@ -397,7 +408,7 @@ public class ExamGroupPracticeService {
         }
 
         session = examGroupSessionRepository.save(session);
-        return toGroupState(session, access.user().getId(), access.canStartGroup());
+        return toGroupState(session, access.user().getId(), access.canStartGroup(), requesterMember.getRoomSessionToken());
     }
 
     @Transactional
@@ -408,7 +419,7 @@ public class ExamGroupPracticeService {
         }
 
         ExamGroupSession session = requireSession(examId, request.sessionId());
-        ensureSessionMember(session, access.user());
+        ExamGroupSessionMember requesterMember = ensureValidRoomSession(session, access.user(), request.roomSessionToken());
 
         LocalDateTime now = LocalDateTime.now();
         session.setStatus("finished");
@@ -431,7 +442,7 @@ public class ExamGroupPracticeService {
             examGroupSessionMemberRepository.saveAll(members);
         }
 
-        return toGroupState(session, access.user().getId(), access.canStartGroup());
+        return toGroupState(session, access.user().getId(), access.canStartGroup(), requesterMember.getRoomSessionToken());
     }
 
     @Transactional
@@ -448,7 +459,7 @@ public class ExamGroupPracticeService {
                     examId,
                     List.of("waiting", "active", "finished"))
                 .orElseThrow(() -> new NotFoundException("Sesion grupal no encontrada.")));
-        ensureSessionMember(session, access.user());
+        ExamGroupSessionMember requesterMember = ensureValidRoomSession(session, access.user(), request.roomSessionToken());
 
         // Conserva historial: finaliza la sesion actual y crea una nueva para el siguiente intento.
         LocalDateTime now = LocalDateTime.now();
@@ -493,7 +504,7 @@ public class ExamGroupPracticeService {
             }
             uniqueMembers.putIfAbsent(memberUser.getId(), previousMember);
         }
-        uniqueMembers.putIfAbsent(access.user().getId(), ensureSessionMember(session, access.user()));
+        uniqueMembers.putIfAbsent(access.user().getId(), requesterMember);
 
         for (ExamGroupSessionMember sourceMember : uniqueMembers.values()) {
             if (sourceMember.getUser() == null || sourceMember.getUser().getId() == null) {
@@ -512,10 +523,12 @@ public class ExamGroupPracticeService {
         }
 
         newSession = refreshSessionPresence(newSession);
-        return toGroupState(newSession, access.user().getId(), access.canStartGroup());
+        requesterMember = ensureValidRoomSession(newSession, access.user(), null);
+        return toGroupState(newSession, access.user().getId(), access.canStartGroup(), requesterMember.getRoomSessionToken());
     }
 
     private GroupAccess resolveGroupAccess(Long examId, Long userId) {
+        ensureAuthenticatedUserMatchesRequest(userId);
         User user = userRepository.findById(userId).orElseThrow(() -> new NotFoundException("Usuario no encontrado"));
         Exam exam = examRepository.findByIdAndDeletedAtIsNull(examId)
                 .orElseThrow(() -> new NotFoundException("Examen no encontrado"));
@@ -533,6 +546,21 @@ public class ExamGroupPracticeService {
 
         boolean canStartGroup = membership != null && Boolean.TRUE.equals(membership.getCanStartGroup());
         return new GroupAccess(exam, user, false, canStartGroup, membership);
+    }
+
+    private void ensureAuthenticatedUserMatchesRequest(Long requestedUserId) {
+        if (requestedUserId == null) {
+            throw new BadRequestException("userId es obligatorio.");
+        }
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || authentication.getPrincipal() == null) {
+            return;
+        }
+        Object principal = authentication.getPrincipal();
+        if (principal instanceof JwtUserPrincipal jwtPrincipal
+                && !requestedUserId.equals(jwtPrincipal.userId())) {
+            throw new ForbiddenException("No tienes permiso para operar con otro usuario.");
+        }
     }
 
     private ExamGroupSession requireSession(Long examId, Long sessionId) {
@@ -590,7 +618,8 @@ public class ExamGroupPracticeService {
         member.setLastSeenAt(LocalDateTime.now());
         member.setDeletedAt(null);
         try {
-            return examGroupSessionMemberRepository.save(member);
+            ExamGroupSessionMember persisted = examGroupSessionMemberRepository.save(member);
+            return persisted != null ? persisted : member;
         } catch (DataIntegrityViolationException raceCondition) {
             ExamGroupSessionMember concurrentMember = examGroupSessionMemberRepository
                     .findBySessionIdAndUserIdAndDeletedAtIsNull(session.getId(), user.getId())
@@ -600,8 +629,37 @@ public class ExamGroupPracticeService {
             concurrentMember.setConnected(Boolean.TRUE);
             concurrentMember.setLastSeenAt(LocalDateTime.now());
             concurrentMember.setDeletedAt(null);
-            return examGroupSessionMemberRepository.save(concurrentMember);
+            ExamGroupSessionMember persisted = examGroupSessionMemberRepository.save(concurrentMember);
+            return persisted != null ? persisted : concurrentMember;
         }
+    }
+
+    private ExamGroupSessionMember ensureValidRoomSession(
+            ExamGroupSession session, User user, String providedRoomSessionToken) {
+        ExamGroupSessionMember member = ensureSessionMember(session, user);
+        LocalDateTime now = LocalDateTime.now();
+        String providedToken = trimOrNull(providedRoomSessionToken);
+
+        if (providedToken != null) {
+            String persistedToken = trimOrNull(member.getRoomSessionToken());
+            LocalDateTime expiresAt = member.getRoomSessionExpiresAt();
+            boolean tokenMatches = persistedToken != null && persistedToken.equals(providedToken);
+            boolean tokenAlive = expiresAt != null && expiresAt.isAfter(now);
+            if (!tokenMatches || !tokenAlive) {
+                throw new ForbiddenException("Tu sesion de sala no es valida. Vuelve a unirte al repaso grupal.");
+            }
+        }
+
+        String activeToken = trimOrNull(member.getRoomSessionToken());
+        LocalDateTime expiresAt = member.getRoomSessionExpiresAt();
+        if (activeToken == null || expiresAt == null || !expiresAt.isAfter(now.plusSeconds(10))) {
+            activeToken = UUID.randomUUID().toString();
+            member.setRoomSessionToken(activeToken);
+            member.setRoomSessionIssuedAt(now);
+        }
+        member.setRoomSessionExpiresAt(now.plusMinutes(ROOM_SESSION_TTL_MINUTES));
+        ExamGroupSessionMember persisted = examGroupSessionMemberRepository.save(member);
+        return persisted != null ? persisted : member;
     }
 
     private ExamGroupSession refreshSessionPresence(ExamGroupSession session) {
@@ -648,7 +706,8 @@ public class ExamGroupPracticeService {
         return session;
     }
 
-    private ExamGroupStateResponse toGroupState(ExamGroupSession session, Long requesterUserId, boolean requesterCanStartGroup) {
+    private ExamGroupStateResponse toGroupState(
+            ExamGroupSession session, Long requesterUserId, boolean requesterCanStartGroup, String roomSessionToken) {
         String status = normalizeStatus(session.getStatus());
         Question currentQuestion = resolveCurrentQuestion(session).orElse(null);
         Map<Long, ExamGroupSessionAnswer> answerByUserId = new HashMap<>();
@@ -807,6 +866,7 @@ public class ExamGroupPracticeService {
 
         return new ExamGroupStateResponse(
                 session.getId(),
+                trimOrDefault(roomSessionToken, ""),
                 session.getExam().getId(),
                 session.getExam().getName(),
                 status,

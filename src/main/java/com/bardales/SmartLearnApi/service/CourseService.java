@@ -768,9 +768,9 @@ public class CourseService {
 
     @Transactional(readOnly = true)
     public ExamGroupStateResponse getCourseSessionContentGroupPracticeState(
-            Long courseId, Long sessionId, Long contentId, Long sessionGroupId, Long userId) {
+            Long courseId, Long sessionId, Long contentId, Long sessionGroupId, Long userId, String roomSessionToken) {
         Exam sourceExam = requireCourseSessionContentExam(courseId, sessionId, contentId, userId);
-        return examGroupPracticeService.state(sourceExam.getId(), sessionGroupId, userId);
+        return examGroupPracticeService.state(sourceExam.getId(), sessionGroupId, userId, roomSessionToken);
     }
 
     @Transactional

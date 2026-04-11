@@ -169,8 +169,9 @@ public class ExamApiController {
     public ExamGroupStateResponse groupPracticeState(
             @PathVariable Long examId,
             @RequestParam Long userId,
-            @RequestParam Long sessionId) {
-        return examGroupPracticeService.state(examId, sessionId, userId);
+            @RequestParam Long sessionId,
+            @RequestParam(required = false) String roomSessionToken) {
+        return examGroupPracticeService.state(examId, sessionId, userId, roomSessionToken);
     }
 
     @PostMapping("/{examId}/practice/group/answer")

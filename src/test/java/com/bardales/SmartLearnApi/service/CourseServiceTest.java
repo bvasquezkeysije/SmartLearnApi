@@ -584,7 +584,7 @@ class CourseServiceTest {
         AnchoredExamFixture fixture = buildAnchoredExamFixture(170L, "exam");
         User participant = buildParticipantUser(2L);
         CourseMembership membership = buildParticipantMembership(fixture.course, participant, "viewer", 1002L);
-        ExamGroupJoinRequest request = new ExamGroupJoinRequest(2L);
+        ExamGroupJoinRequest request = new ExamGroupJoinRequest(2L, null);
         ExamGroupStateResponse expected = emptyGroupState(fixture.exam.getId(), fixture.exam.getName());
 
         when(userRepository.findById(2L)).thenReturn(Optional.of(participant));
@@ -605,7 +605,7 @@ class CourseServiceTest {
         AnchoredExamFixture fixture = buildAnchoredExamFixture(180L, "exam");
         User participant = buildParticipantUser(2L);
         CourseMembership membership = buildParticipantMembership(fixture.course, participant, "viewer", 1003L);
-        ExamGroupJoinRequest request = new ExamGroupJoinRequest(2L);
+        ExamGroupJoinRequest request = new ExamGroupJoinRequest(2L, null);
         ExamGroupStateResponse expected = emptyGroupState(fixture.exam.getId(), fixture.exam.getName());
 
         when(userRepository.findById(2L)).thenReturn(Optional.of(participant));
@@ -942,6 +942,7 @@ class CourseServiceTest {
         private ExamGroupStateResponse emptyGroupState(Long examId, String examName) {
                 return new ExamGroupStateResponse(
                                 1L,
+                                null,
                                 examId,
                                 examName,
                                 "waiting",

@@ -4,4 +4,5 @@ import jakarta.validation.constraints.NotNull;
 
 public record ExamGroupStartRequest(
         @NotNull(message = "userId es obligatorio") Long userId,
-        @NotNull(message = "sessionId es obligatorio") Long sessionId) {}
+        @NotNull(message = "sessionId es obligatorio") Long sessionId,
+        String roomSessionToken) {}

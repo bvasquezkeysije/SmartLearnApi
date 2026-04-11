@@ -8,4 +8,5 @@ public record ExamGroupAnswerRequest(
         @NotNull(message = "questionId es obligatorio") Long questionId,
         Integer questionVersion,
         String selectedOption,
-        String writtenAnswer) {}
+        String writtenAnswer,
+        String roomSessionToken) {}

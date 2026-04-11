@@ -27,6 +27,15 @@ public class ExamGroupSessionMember extends BaseEntity {
     @Column(name = "last_seen_at")
     private LocalDateTime lastSeenAt;
 
+    @Column(name = "room_session_token", length = 128)
+    private String roomSessionToken;
+
+    @Column(name = "room_session_issued_at")
+    private LocalDateTime roomSessionIssuedAt;
+
+    @Column(name = "room_session_expires_at")
+    private LocalDateTime roomSessionExpiresAt;
+
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
@@ -60,6 +69,30 @@ public class ExamGroupSessionMember extends BaseEntity {
 
     public void setLastSeenAt(LocalDateTime lastSeenAt) {
         this.lastSeenAt = lastSeenAt;
+    }
+
+    public String getRoomSessionToken() {
+        return roomSessionToken;
+    }
+
+    public void setRoomSessionToken(String roomSessionToken) {
+        this.roomSessionToken = roomSessionToken;
+    }
+
+    public LocalDateTime getRoomSessionIssuedAt() {
+        return roomSessionIssuedAt;
+    }
+
+    public void setRoomSessionIssuedAt(LocalDateTime roomSessionIssuedAt) {
+        this.roomSessionIssuedAt = roomSessionIssuedAt;
+    }
+
+    public LocalDateTime getRoomSessionExpiresAt() {
+        return roomSessionExpiresAt;
+    }
+
+    public void setRoomSessionExpiresAt(LocalDateTime roomSessionExpiresAt) {
+        this.roomSessionExpiresAt = roomSessionExpiresAt;
     }
 
     public LocalDateTime getDeletedAt() {

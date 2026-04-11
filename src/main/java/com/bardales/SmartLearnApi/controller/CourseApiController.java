@@ -399,8 +399,10 @@ public class CourseApiController {
             @PathVariable Long sessionId,
             @PathVariable Long contentId,
             @RequestParam Long userId,
-            @RequestParam Long sessionGroupId) {
-        return courseService.getCourseSessionContentGroupPracticeState(courseId, sessionId, contentId, sessionGroupId, userId);
+            @RequestParam Long sessionGroupId,
+            @RequestParam(required = false) String roomSessionToken) {
+        return courseService.getCourseSessionContentGroupPracticeState(
+                courseId, sessionId, contentId, sessionGroupId, userId, roomSessionToken);
     }
 
     @PostMapping("/{courseId}/sessions/{sessionId}/contents/{contentId}/exam-practice/group/answer")

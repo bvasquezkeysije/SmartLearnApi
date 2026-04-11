@@ -93,7 +93,7 @@ class ExamGroupPracticeServiceTest {
         when(questionRepository.findById(102L)).thenReturn(Optional.of(q2));
         when(optionRepository.findByQuestionIdOrderByIdAsc(102L)).thenReturn(List.of());
 
-        ExamGroupStateResponse state = service.state(f.exam.getId(), f.session.getId(), f.owner.getId());
+        ExamGroupStateResponse state = service.state(f.exam.getId(), f.session.getId(), f.owner.getId(), null);
 
         assertEquals("active", state.status());
         assertEquals(1, state.currentQuestionIndex());
@@ -110,7 +110,7 @@ class ExamGroupPracticeServiceTest {
         Question q1 = question(101L, f.exam, 30, 10);
         when(questionRepository.findById(101L)).thenReturn(Optional.of(q1));
 
-        ExamGroupStateResponse state = service.state(f.exam.getId(), f.session.getId(), f.owner.getId());
+        ExamGroupStateResponse state = service.state(f.exam.getId(), f.session.getId(), f.owner.getId(), null);
 
         assertEquals("finished", state.status());
         assertEquals("open", state.phase());
@@ -147,7 +147,7 @@ class ExamGroupPracticeServiceTest {
         when(examMembershipRepository.findByExamIdAndDeletedAtIsNullOrderByCreatedAtAsc(f.exam.getId()))
                 .thenReturn(List.of(secondMembership));
 
-        ExamGroupStateResponse state = service.state(f.exam.getId(), f.session.getId(), f.owner.getId());
+        ExamGroupStateResponse state = service.state(f.exam.getId(), f.session.getId(), f.owner.getId(), null);
 
         assertEquals(1, state.currentQuestionIndex());
         assertEquals("open", state.phase());
@@ -186,8 +186,8 @@ class ExamGroupPracticeServiceTest {
         when(examMembershipRepository.findByExamIdAndUserIdAndDeletedAtIsNull(f.exam.getId(), secondUser.getId()))
                 .thenReturn(Optional.of(secondMembership));
 
-        ExamGroupStateResponse firstPoll = service.state(f.exam.getId(), f.session.getId(), f.owner.getId());
-        ExamGroupStateResponse secondPoll = service.state(f.exam.getId(), f.session.getId(), secondUser.getId());
+        ExamGroupStateResponse firstPoll = service.state(f.exam.getId(), f.session.getId(), f.owner.getId(), null);
+        ExamGroupStateResponse secondPoll = service.state(f.exam.getId(), f.session.getId(), secondUser.getId(), null);
 
         assertEquals(1, firstPoll.currentQuestionIndex());
         assertEquals(firstPoll.currentQuestionIndex(), secondPoll.currentQuestionIndex());
@@ -238,7 +238,9 @@ class ExamGroupPracticeServiceTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         ExamGroupStateResponse state = assertDoesNotThrow(
-                () -> service.join(exam.getId(), new com.bardales.SmartLearnApi.dto.exam.ExamGroupJoinRequest(participant.getId())));
+                () -> service.join(
+                        exam.getId(),
+                        new com.bardales.SmartLearnApi.dto.exam.ExamGroupJoinRequest(participant.getId(), null)));
 
         assertEquals("waiting", state.status());
         assertEquals(session.getId(), state.sessionId());
@@ -321,12 +323,12 @@ class ExamGroupPracticeServiceTest {
                 });
 
         // Heartbeat de participante: debe reconectarlo antes de que responda el owner.
-        ExamGroupStateResponse participantState = service.state(exam.getId(), session.getId(), participant.getId());
+        ExamGroupStateResponse participantState = service.state(exam.getId(), session.getId(), participant.getId(), null);
         assertEquals("open", participantState.phase());
 
         ExamGroupStateResponse stateAfterOwnerAnswer = service.answer(
                 exam.getId(),
-                new ExamGroupAnswerRequest(owner.getId(), session.getId(), q1.getId(), 1, "a", null));
+                new ExamGroupAnswerRequest(owner.getId(), session.getId(), q1.getId(), 1, "a", null, null));
 
         assertEquals("open", stateAfterOwnerAnswer.phase());
         assertEquals("active", stateAfterOwnerAnswer.status());
@@ -402,7 +404,7 @@ class ExamGroupPracticeServiceTest {
 
         ExamGroupStateResponse stateAfterOwnerAnswer = service.answer(
                 exam.getId(),
-                new ExamGroupAnswerRequest(owner.getId(), session.getId(), q1.getId(), 1, "a", null));
+                new ExamGroupAnswerRequest(owner.getId(), session.getId(), q1.getId(), 1, "a", null, null));
 
         assertEquals("open", stateAfterOwnerAnswer.phase());
         assertEquals("active", stateAfterOwnerAnswer.status());
