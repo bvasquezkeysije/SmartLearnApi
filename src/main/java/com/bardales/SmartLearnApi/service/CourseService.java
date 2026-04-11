@@ -120,6 +120,11 @@ public class CourseService {
 
     @Transactional(readOnly = true)
     public CourseModuleResponse getModule(Long userId) {
+        return getModule(userId, true);
+    }
+
+    @Transactional(readOnly = true)
+    public CourseModuleResponse getModule(Long userId, boolean includeAvailableExams) {
         requireUser(userId);
 
         Map<Long, Course> coursesById = new LinkedHashMap<>();
@@ -158,7 +163,7 @@ public class CourseService {
                 .map(course -> toCourseResponse(course, preloadContext))
                 .toList();
 
-        List<CourseExamItemResponse> availableExams = getModuleExams(userId);
+        List<CourseExamItemResponse> availableExams = includeAvailableExams ? getModuleExams(userId) : List.of();
 
         // Compatibilidad temporal: mantenemos availableExams en v1 mientras los clientes migran a /module-exams.
         return new CourseModuleResponse(courses, availableExams);

@@ -62,8 +62,10 @@ public class CourseApiController {
     }
 
     @GetMapping
-    public CourseModuleResponse getModule(@RequestParam Long userId) {
-        return courseService.getModule(userId);
+    public CourseModuleResponse getModule(
+            @RequestParam Long userId,
+            @RequestParam(defaultValue = "true") boolean includeAvailableExams) {
+        return courseService.getModule(userId, includeAvailableExams);
     }
 
     @GetMapping("/module-exams")
