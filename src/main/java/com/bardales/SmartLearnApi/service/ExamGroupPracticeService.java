@@ -1280,9 +1280,11 @@ public class ExamGroupPracticeService {
         List<ExamGroupSessionMember> members =
                 examGroupSessionMemberRepository.findBySessionIdAndDeletedAtIsNullOrderByCreatedAtAsc(sessionId);
         // Regla de negocio: para cerrar una pregunta por "todos respondieron",
-        // se exige respuesta de todos los integrantes de la sala.
-        // No se debe adelantar solo porque algun miembro quede temporalmente desconectado.
+        // se exige respuesta de todos los participantes actualmente conectados.
+        // Si alguien pierde conectividad, el cierre por respuestas no debe bloquearse;
+        // en ese caso tambien existe cierre por timeout del temporizador.
         List<Long> participantUserIds = members.stream()
+                .filter(member -> Boolean.TRUE.equals(member.getConnected()))
                 .map(member -> member.getUser() == null ? null : member.getUser().getId())
                 .filter(userId -> userId != null)
                 .toList();
