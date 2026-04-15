@@ -178,7 +178,7 @@ public class ExamGroupPracticeService {
             throw new BadRequestException("Ya existe un repaso grupal creado para este examen. Debes unirte al existente.");
         }
 
-        ensureValidRoomSession(session, access.user(), request.roomSessionToken());
+        String requesterRoomSessionToken = ensureValidRoomSession(session, access.user(), request.roomSessionToken());
         return toGroupState(session, access.user().getId(), access.canStartGroup(), requesterRoomSessionToken);
     }
 
@@ -465,7 +465,7 @@ public class ExamGroupPracticeService {
                     examId,
                     List.of("waiting", "active", "finished"))
                 .orElseThrow(() -> new NotFoundException("Sesion grupal no encontrada.")));
-        String requesterRoomSessionToken = ensureValidRoomSession(session, access.user(), request.roomSessionToken());
+        ensureValidRoomSession(session, access.user(), request.roomSessionToken());
 
         // Conserva historial: finaliza la sesion actual y crea una nueva para el siguiente intento.
         LocalDateTime now = LocalDateTime.now();
