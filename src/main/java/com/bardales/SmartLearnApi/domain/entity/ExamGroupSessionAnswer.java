@@ -34,6 +34,18 @@ public class ExamGroupSessionAnswer extends BaseEntity {
     @Column(name = "answered_at")
     private LocalDateTime answeredAt;
 
+    @Column(name = "round_number", nullable = false)
+    private Integer roundNumber = 1;
+
+    @Column(name = "question_version", nullable = false)
+    private Integer questionVersion = 1;
+
+    @Column(name = "submitted_at", nullable = false)
+    private LocalDateTime submittedAt;
+
+    @Column(name = "is_final", nullable = false)
+    private Boolean isFinal = Boolean.TRUE;
+
     public ExamGroupSession getSession() {
         return session;
     }
@@ -80,5 +92,37 @@ public class ExamGroupSessionAnswer extends BaseEntity {
 
     public void setAnsweredAt(LocalDateTime answeredAt) {
         this.answeredAt = answeredAt;
+    }
+
+    public Integer getRoundNumber() {
+        return roundNumber;
+    }
+
+    public void setRoundNumber(Integer roundNumber) {
+        this.roundNumber = roundNumber;
+    }
+
+    public Integer getQuestionVersion() {
+        return questionVersion;
+    }
+
+    public void setQuestionVersion(Integer questionVersion) {
+        this.questionVersion = questionVersion;
+    }
+
+    public LocalDateTime getSubmittedAt() {
+        return submittedAt;
+    }
+
+    public void setSubmittedAt(LocalDateTime submittedAt) {
+        this.submittedAt = submittedAt;
+    }
+
+    public Boolean getIsFinal() {
+        return isFinal;
+    }
+
+    public void setIsFinal(Boolean isFinal) {
+        this.isFinal = isFinal;
     }
 }

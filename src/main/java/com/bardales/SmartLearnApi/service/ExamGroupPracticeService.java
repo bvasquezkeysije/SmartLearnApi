@@ -5,7 +5,9 @@ import com.bardales.SmartLearnApi.domain.entity.ExamGroupSession;
 import com.bardales.SmartLearnApi.domain.entity.ExamGroupSessionAnswer;
 import com.bardales.SmartLearnApi.domain.entity.ExamGroupSessionMember;
 import com.bardales.SmartLearnApi.domain.entity.ExamGroupRoomSession;
+import com.bardales.SmartLearnApi.domain.entity.ExamGroupSessionEvent;
 import com.bardales.SmartLearnApi.domain.entity.ExamMembership;
+import com.bardales.SmartLearnApi.domain.entity.ExamGroupSessionRound;
 import com.bardales.SmartLearnApi.domain.entity.Option;
 import com.bardales.SmartLearnApi.domain.entity.Question;
 import com.bardales.SmartLearnApi.domain.entity.User;
@@ -14,6 +16,8 @@ import com.bardales.SmartLearnApi.domain.repository.ExamGroupSessionMemberReposi
 import com.bardales.SmartLearnApi.domain.repository.ExamGroupRoomSessionRepository;
 import com.bardales.SmartLearnApi.domain.repository.ExamGroupSessionRepository;
 import com.bardales.SmartLearnApi.domain.repository.ExamMembershipRepository;
+import com.bardales.SmartLearnApi.domain.repository.ExamGroupSessionEventRepository;
+import com.bardales.SmartLearnApi.domain.repository.ExamGroupSessionRoundRepository;
 import com.bardales.SmartLearnApi.domain.repository.ExamRepository;
 import com.bardales.SmartLearnApi.domain.repository.OptionRepository;
 import com.bardales.SmartLearnApi.domain.repository.QuestionRepository;
@@ -72,6 +76,8 @@ public class ExamGroupPracticeService {
     private final ExamGroupSessionMemberRepository examGroupSessionMemberRepository;
     private final ExamGroupRoomSessionRepository examGroupRoomSessionRepository;
     private final ExamGroupSessionAnswerRepository examGroupSessionAnswerRepository;
+    private final ExamGroupSessionRoundRepository examGroupSessionRoundRepository;
+    private final ExamGroupSessionEventRepository examGroupSessionEventRepository;
 
     public ExamGroupPracticeService(
             ExamRepository examRepository,
@@ -82,7 +88,9 @@ public class ExamGroupPracticeService {
             ExamGroupSessionRepository examGroupSessionRepository,
             ExamGroupSessionMemberRepository examGroupSessionMemberRepository,
             ExamGroupRoomSessionRepository examGroupRoomSessionRepository,
-            ExamGroupSessionAnswerRepository examGroupSessionAnswerRepository) {
+            ExamGroupSessionAnswerRepository examGroupSessionAnswerRepository,
+            ExamGroupSessionRoundRepository examGroupSessionRoundRepository,
+            ExamGroupSessionEventRepository examGroupSessionEventRepository) {
         this.examRepository = examRepository;
         this.userRepository = userRepository;
         this.examMembershipRepository = examMembershipRepository;
@@ -92,6 +100,8 @@ public class ExamGroupPracticeService {
         this.examGroupSessionMemberRepository = examGroupSessionMemberRepository;
         this.examGroupRoomSessionRepository = examGroupRoomSessionRepository;
         this.examGroupSessionAnswerRepository = examGroupSessionAnswerRepository;
+        this.examGroupSessionRoundRepository = examGroupSessionRoundRepository;
+        this.examGroupSessionEventRepository = examGroupSessionEventRepository;
     }
 
     @Transactional
@@ -233,6 +243,8 @@ public class ExamGroupPracticeService {
         session.setQuestionVersion(1);
         session.setFinishedAt(null);
         session = examGroupSessionRepository.save(session);
+        ensureCurrentRoundOpen(session);
+        appendSessionEvent(session, resolveCurrentRoundNumber(session), access.user(), "SESSION_STARTED");
 
         return toGroupState(session, access.user().getId(), access.canStartGroup(), requesterRoomSessionToken);
     }
@@ -335,8 +347,9 @@ public class ExamGroupPracticeService {
             throw new BadRequestException("Tu respuesta pertenece a una version anterior de la pregunta.");
         }
 
+        Integer currentRoundNumber = resolveCurrentRoundNumber(session);
         List<ExamGroupSessionAnswer> storedAnswers = examGroupSessionAnswerRepository
-                .findAllForUserQuestion(session.getId(), access.user().getId(), currentQuestion.getId());
+                .findAllForUserQuestionRound(session.getId(), access.user().getId(), currentQuestion.getId(), currentRoundNumber);
         ExamGroupSessionAnswer answer = pickBestAnswer(storedAnswers);
         if (answer == null) {
             answer = new ExamGroupSessionAnswer();
@@ -368,8 +381,14 @@ public class ExamGroupPracticeService {
         boolean isCorrect = evaluateAnswer(currentQuestion, selectedAnswer);
         answer.setSelectedAnswer(selectedAnswer);
         answer.setIsCorrect(isCorrect);
-        answer.setAnsweredAt(LocalDateTime.now());
+        LocalDateTime submittedAt = LocalDateTime.now();
+        answer.setAnsweredAt(submittedAt);
+        answer.setSubmittedAt(submittedAt);
+        answer.setRoundNumber(currentRoundNumber);
+        answer.setQuestionVersion(session.getQuestionVersion() == null ? 1 : session.getQuestionVersion());
+        answer.setIsFinal(Boolean.TRUE);
         examGroupSessionAnswerRepository.save(answer);
+        appendSessionEvent(session, currentRoundNumber, access.user(), "ANSWER_SUBMITTED");
         session = syncSessionPhase(session);
         return toGroupState(session, access.user().getId(), access.canStartGroup(), requesterRoomSessionToken);
     }
@@ -394,6 +413,7 @@ public class ExamGroupPracticeService {
 
         int currentIndex = session.getCurrentQuestionIndex() == null ? 0 : session.getCurrentQuestionIndex();
         int totalQuestions = session.getTotalQuestions() == null ? 0 : session.getTotalQuestions();
+        closeCurrentRound(session, "manual_next");
         if (currentIndex + 1 >= totalQuestions) {
             session.setStatus("finished");
             session.setFinishedAt(LocalDateTime.now());
@@ -413,6 +433,10 @@ public class ExamGroupPracticeService {
         }
 
         session = examGroupSessionRepository.save(session);
+        if ("active".equals(normalizeStatus(session.getStatus()))) {
+            ensureCurrentRoundOpen(session);
+        }
+        appendSessionEvent(session, resolveCurrentRoundNumber(session), access.user(), "MANUAL_NEXT");
         return toGroupState(session, access.user().getId(), access.canStartGroup(), requesterRoomSessionToken);
     }
 
@@ -427,6 +451,7 @@ public class ExamGroupPracticeService {
         String requesterRoomSessionToken = ensureValidRoomSession(session, access.user(), request.roomSessionToken());
 
         LocalDateTime now = LocalDateTime.now();
+        closeCurrentRound(session, "session_closed");
         session.setStatus("finished");
         if (session.getStartedAt() == null) {
             session.setStartedAt(now);
@@ -438,6 +463,7 @@ public class ExamGroupPracticeService {
         session.setFinishedAt(now);
         session = examGroupSessionRepository.save(session);
         revokeRoomSessions(session.getId());
+        appendSessionEvent(session, null, access.user(), "SESSION_CLOSED");
 
         List<ExamGroupSessionMember> members =
                 examGroupSessionMemberRepository.findBySessionIdAndDeletedAtIsNullOrderByCreatedAtAsc(session.getId());
@@ -473,6 +499,7 @@ public class ExamGroupPracticeService {
             session.setStartedAt(now);
         }
         if (!"finished".equals(normalizeStatus(session.getStatus()))) {
+            closeCurrentRound(session, "session_closed");
             session.setStatus("finished");
         }
         session.setCurrentQuestionStartedAt(null);
@@ -531,6 +558,8 @@ public class ExamGroupPracticeService {
 
         newSession = refreshSessionPresence(newSession);
         String newSessionRoomToken = ensureValidRoomSession(newSession, access.user(), null);
+        appendSessionEvent(session, null, access.user(), "SESSION_RESTARTED");
+        appendSessionEvent(newSession, null, access.user(), "SESSION_CREATED");
         return toGroupState(newSession, access.user().getId(), access.canStartGroup(), newSessionRoomToken);
     }
 
@@ -723,6 +752,7 @@ public class ExamGroupPracticeService {
 
         String status = normalizeStatus(session.getStatus());
         if (connectedCount == 0 && ("waiting".equals(status) || "active".equals(status))) {
+            closeCurrentRound(session, "session_closed");
             session.setStatus("finished");
             if ("active".equals(status) && session.getStartedAt() == null) {
                 session.setStartedAt(now);
@@ -730,6 +760,7 @@ public class ExamGroupPracticeService {
             session.setCurrentQuestionStartedAt(null);
             session.setFinishedAt(now);
             revokeRoomSessions(session.getId());
+            appendSessionEvent(session, resolveCurrentRoundNumber(session), null, "SESSION_FINISHED");
             return examGroupSessionRepository.save(session);
         }
 
@@ -745,8 +776,9 @@ public class ExamGroupPracticeService {
         LocalDateTime firstAnsweredAt = null;
         Long firstAnsweredUserId = null;
         if (currentQuestion != null) {
+            Integer roundNumber = resolveCurrentRoundNumber(session);
             for (ExamGroupSessionAnswer answer :
-                    examGroupSessionAnswerRepository.findForQuestion(session.getId(), currentQuestion.getId())) {
+                    examGroupSessionAnswerRepository.findForQuestionRound(session.getId(), currentQuestion.getId(), roundNumber)) {
                 if (answer.getUser() == null || answer.getUser().getId() == null) {
                     continue;
                 }
@@ -1178,6 +1210,7 @@ public class ExamGroupPracticeService {
         if (currentQuestion == null) {
             return session;
         }
+        ensureCurrentRoundOpen(session);
 
         LocalDateTime now = LocalDateTime.now();
         boolean changed = false;
@@ -1208,6 +1241,8 @@ public class ExamGroupPracticeService {
             boolean allConnectedAnswered = hasAllConnectedAnswered(session.getId(), currentQuestion.getId());
             if (timerExpired || allConnectedAnswered) {
                 int reviewSeconds = Math.max(1, currentQuestion.getReviewSeconds() == null ? 10 : currentQuestion.getReviewSeconds());
+                String closeReason = timerExpired ? "timer_expired" : "all_answered";
+                transitionCurrentRoundToReview(session, now, now.plusSeconds(reviewSeconds), closeReason);
                 session.setPhase(PHASE_REVIEW);
                 session.setPhaseStartedAt(now);
                 session.setPhaseEndsAt(now.plusSeconds(reviewSeconds));
@@ -1220,12 +1255,14 @@ public class ExamGroupPracticeService {
                         reviewSeconds);
                 changed = true;
                 phase = PHASE_REVIEW;
+                appendSessionEvent(session, resolveCurrentRoundNumber(session), null, "ROUND_REVIEW_STARTED");
             }
         }
 
         if (PHASE_REVIEW.equals(phase)) {
             LocalDateTime reviewEndsAt = session.getPhaseEndsAt();
             if (reviewEndsAt != null && !now.isBefore(reviewEndsAt)) {
+                closeCurrentRound(session, "timer_expired");
                 int currentIndex = session.getCurrentQuestionIndex() == null ? 0 : session.getCurrentQuestionIndex();
                 int totalQuestions = session.getTotalQuestions() == null ? 0 : session.getTotalQuestions();
                 if (currentIndex + 1 >= totalQuestions) {
@@ -1236,6 +1273,7 @@ public class ExamGroupPracticeService {
                     session.setPhaseStartedAt(null);
                     session.setPhaseEndsAt(null);
                     revokeRoomSessions(session.getId());
+                    appendSessionEvent(session, resolveCurrentRoundNumber(session), null, "SESSION_FINISHED");
                     log.info(
                             "GROUP_PHASE_AUTO_REVIEW_TO_FINISHED sessionId={} examId={} lastQuestionIndex={} totalQuestions={}",
                             session.getId(),
@@ -1250,6 +1288,8 @@ public class ExamGroupPracticeService {
                     Question nextQuestion = resolveCurrentQuestion(session).orElse(null);
                     session.setPhaseEndsAt(resolveQuestionDeadline(nextQuestion, now));
                     session.setQuestionVersion((session.getQuestionVersion() == null ? 1 : session.getQuestionVersion()) + 1);
+                    ensureCurrentRoundOpen(session);
+                    appendSessionEvent(session, resolveCurrentRoundNumber(session), null, "ROUND_OPENED");
                     log.info(
                             "GROUP_PHASE_AUTO_REVIEW_TO_OPEN sessionId={} examId={} fromQuestionIndex={} toQuestionIndex={} nextDeadline={} questionVersion={}",
                             session.getId(),
@@ -1273,10 +1313,120 @@ public class ExamGroupPracticeService {
         examGroupRoomSessionRepository.revokeActiveBySessionId(sessionId, LocalDateTime.now());
     }
 
+    private Integer resolveCurrentRoundNumber(ExamGroupSession session) {
+        if (session == null) {
+            return 1;
+        }
+        int currentIndex = session.getCurrentQuestionIndex() == null ? 0 : session.getCurrentQuestionIndex();
+        return Math.max(1, currentIndex + 1);
+    }
+
+    private ExamGroupSessionRound ensureCurrentRoundOpen(ExamGroupSession session) {
+        if (session == null || session.getId() == null) {
+            return null;
+        }
+        Question currentQuestion = resolveCurrentQuestion(session).orElse(null);
+        if (currentQuestion == null || currentQuestion.getId() == null) {
+            return null;
+        }
+        Integer roundNumber = resolveCurrentRoundNumber(session);
+        ExamGroupSessionRound round = examGroupSessionRoundRepository
+                .findBySession_IdAndRoundNumberAndDeletedAtIsNull(session.getId(), roundNumber)
+                .orElseGet(() -> {
+                    ExamGroupSessionRound created = new ExamGroupSessionRound();
+                    created.setSession(session);
+                    created.setRoundNumber(roundNumber);
+                    created.setQuestion(currentQuestion);
+                    return created;
+                });
+        round.setDeletedAt(null);
+        round.setQuestion(currentQuestion);
+        if (!PHASE_REVIEW.equals(normalizePhase(session.getPhase()))) {
+            round.setPhase(PHASE_OPEN);
+            if (round.getOpenStartedAt() == null) {
+                LocalDateTime openStartedAt = session.getCurrentQuestionStartedAt() != null
+                        ? session.getCurrentQuestionStartedAt()
+                        : LocalDateTime.now();
+                round.setOpenStartedAt(openStartedAt);
+            }
+            round.setOpenEndsAt(session.getPhaseEndsAt());
+        }
+        return examGroupSessionRoundRepository.save(round);
+    }
+
+    private void transitionCurrentRoundToReview(
+            ExamGroupSession session,
+            LocalDateTime reviewStartedAt,
+            LocalDateTime reviewEndsAt,
+            String closeReason) {
+        if (session == null || session.getId() == null) {
+            return;
+        }
+        ExamGroupSessionRound round = ensureCurrentRoundOpen(session);
+        if (round == null) {
+            return;
+        }
+        round.setPhase(PHASE_REVIEW);
+        if (round.getOpenStartedAt() == null) {
+            round.setOpenStartedAt(session.getCurrentQuestionStartedAt());
+        }
+        if (round.getOpenEndsAt() == null) {
+            round.setOpenEndsAt(session.getPhaseEndsAt());
+        }
+        round.setReviewStartedAt(reviewStartedAt);
+        round.setReviewEndsAt(reviewEndsAt);
+        round.setCloseReason(trimOrDefault(closeReason, "timer_expired"));
+        examGroupSessionRoundRepository.save(round);
+    }
+
+    private void closeCurrentRound(ExamGroupSession session, String closeReason) {
+        if (session == null || session.getId() == null) {
+            return;
+        }
+        Integer roundNumber = resolveCurrentRoundNumber(session);
+        ExamGroupSessionRound round = examGroupSessionRoundRepository
+                .findBySession_IdAndRoundNumberAndDeletedAtIsNull(session.getId(), roundNumber)
+                .orElse(null);
+        if (round == null) {
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        round.setPhase("closed");
+        if (round.getReviewStartedAt() == null) {
+            round.setReviewStartedAt(now);
+        }
+        if (round.getReviewEndsAt() == null) {
+            round.setReviewEndsAt(now);
+        }
+        if (trimOrNull(round.getCloseReason()) == null) {
+            round.setCloseReason(trimOrDefault(closeReason, "session_closed"));
+        }
+        examGroupSessionRoundRepository.save(round);
+    }
+
+    private void appendSessionEvent(
+            ExamGroupSession session, Integer roundNumber, User actorUser, String eventType) {
+        if (session == null || session.getId() == null || trimOrNull(eventType) == null) {
+            return;
+        }
+        ExamGroupSessionEvent event = new ExamGroupSessionEvent();
+        event.setSession(session);
+        event.setRoundNumber(roundNumber);
+        event.setActorUser(actorUser);
+        event.setEventType(eventType);
+        event.setPayloadJson("{}");
+        examGroupSessionEventRepository.save(event);
+    }
+
     private boolean hasAllConnectedAnswered(Long sessionId, Long questionId) {
         if (sessionId == null || questionId == null) {
             return false;
         }
+        ExamGroupSession session = examGroupSessionRepository.findById(sessionId).orElse(null);
+        if (session == null) {
+            return false;
+        }
+        Integer roundNumber = resolveCurrentRoundNumber(session);
         List<ExamGroupSessionMember> members =
                 examGroupSessionMemberRepository.findBySessionIdAndDeletedAtIsNullOrderByCreatedAtAsc(sessionId);
         // Regla de negocio: para cerrar una pregunta por "todos respondieron",
@@ -1292,7 +1442,8 @@ public class ExamGroupPracticeService {
             return false;
         }
         Map<Long, ExamGroupSessionAnswer> answerByUserId = new HashMap<>();
-        for (ExamGroupSessionAnswer answer : examGroupSessionAnswerRepository.findForQuestion(sessionId, questionId)) {
+        for (ExamGroupSessionAnswer answer :
+                examGroupSessionAnswerRepository.findForQuestionRound(sessionId, questionId, roundNumber)) {
             if (answer == null || answer.getUser() == null || answer.getUser().getId() == null) {
                 continue;
             }

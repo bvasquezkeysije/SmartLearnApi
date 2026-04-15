@@ -38,12 +38,40 @@ public interface ExamGroupSessionAnswerRepository extends JpaRepository<ExamGrou
         SELECT answer
         FROM ExamGroupSessionAnswer answer
         WHERE answer.session.id = :sessionId
+          AND answer.user.id = :userId
+          AND answer.question.id = :questionId
+          AND answer.roundNumber = :roundNumber
+        ORDER BY answer.answeredAt DESC, answer.createdAt DESC, answer.id DESC
+        """)
+    List<ExamGroupSessionAnswer> findAllForUserQuestionRound(
+        @Param("sessionId") Long sessionId,
+        @Param("userId") Long userId,
+        @Param("questionId") Long questionId,
+        @Param("roundNumber") Integer roundNumber);
+
+    @Query("""
+        SELECT answer
+        FROM ExamGroupSessionAnswer answer
+        WHERE answer.session.id = :sessionId
           AND answer.question.id = :questionId
         ORDER BY answer.answeredAt ASC, answer.id ASC
         """)
     List<ExamGroupSessionAnswer> findForQuestion(
         @Param("sessionId") Long sessionId,
         @Param("questionId") Long questionId);
+
+    @Query("""
+        SELECT answer
+        FROM ExamGroupSessionAnswer answer
+        WHERE answer.session.id = :sessionId
+          AND answer.question.id = :questionId
+          AND answer.roundNumber = :roundNumber
+        ORDER BY answer.answeredAt ASC, answer.id ASC
+        """)
+    List<ExamGroupSessionAnswer> findForQuestionRound(
+        @Param("sessionId") Long sessionId,
+        @Param("questionId") Long questionId,
+        @Param("roundNumber") Integer roundNumber);
 
     @Modifying
     @Query("""
