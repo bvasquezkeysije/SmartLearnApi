@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.bardales.SmartLearnApi.domain.entity.Exam;
+import com.bardales.SmartLearnApi.domain.entity.ExamGroupRoomSession;
 import com.bardales.SmartLearnApi.domain.entity.ExamGroupSession;
 import com.bardales.SmartLearnApi.domain.entity.ExamGroupSessionMember;
 import com.bardales.SmartLearnApi.domain.entity.ExamMembership;
@@ -19,6 +20,7 @@ import com.bardales.SmartLearnApi.domain.entity.Question;
 import com.bardales.SmartLearnApi.domain.entity.User;
 import com.bardales.SmartLearnApi.domain.repository.ExamGroupSessionAnswerRepository;
 import com.bardales.SmartLearnApi.domain.repository.ExamGroupSessionMemberRepository;
+import com.bardales.SmartLearnApi.domain.repository.ExamGroupRoomSessionRepository;
 import com.bardales.SmartLearnApi.domain.repository.ExamGroupSessionRepository;
 import com.bardales.SmartLearnApi.domain.repository.ExamMembershipRepository;
 import com.bardales.SmartLearnApi.domain.repository.ExamRepository;
@@ -60,6 +62,8 @@ class ExamGroupPracticeServiceTest {
     @Mock
     private ExamGroupSessionMemberRepository examGroupSessionMemberRepository;
     @Mock
+    private ExamGroupRoomSessionRepository examGroupRoomSessionRepository;
+    @Mock
     private ExamGroupSessionAnswerRepository examGroupSessionAnswerRepository;
 
     private ExamGroupPracticeService service;
@@ -74,10 +78,19 @@ class ExamGroupPracticeServiceTest {
                 optionRepository,
                 examGroupSessionRepository,
                 examGroupSessionMemberRepository,
+                examGroupRoomSessionRepository,
                 examGroupSessionAnswerRepository);
 
         when(examGroupSessionRepository.save(any(ExamGroupSession.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
+        when(examGroupRoomSessionRepository.save(any(ExamGroupRoomSession.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(examGroupRoomSessionRepository
+                .findTopBySessionIdAndUserIdAndDeletedAtIsNullAndRevokedAtIsNullOrderByIdDesc(anyLong(), anyLong()))
+                .thenReturn(Optional.empty());
+        when(examGroupRoomSessionRepository
+                .findTopBySessionIdAndRoomTokenAndDeletedAtIsNullAndRevokedAtIsNullOrderByIdDesc(anyLong(), any()))
+                .thenReturn(Optional.empty());
         when(examGroupSessionAnswerRepository.findForQuestion(anyLong(), anyLong())).thenReturn(List.of());
         when(optionRepository.findByQuestionIdOrderByIdAsc(anyLong())).thenReturn(List.of());
     }
