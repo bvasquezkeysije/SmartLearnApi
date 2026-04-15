@@ -13,7 +13,9 @@ import static org.mockito.Mockito.when;
 import com.bardales.SmartLearnApi.domain.entity.Exam;
 import com.bardales.SmartLearnApi.domain.entity.ExamGroupRoomSession;
 import com.bardales.SmartLearnApi.domain.entity.ExamGroupSession;
+import com.bardales.SmartLearnApi.domain.entity.ExamGroupSessionEvent;
 import com.bardales.SmartLearnApi.domain.entity.ExamGroupSessionMember;
+import com.bardales.SmartLearnApi.domain.entity.ExamGroupSessionRound;
 import com.bardales.SmartLearnApi.domain.entity.ExamMembership;
 import com.bardales.SmartLearnApi.domain.entity.Option;
 import com.bardales.SmartLearnApi.domain.entity.ExamGroupSessionAnswer;
@@ -24,6 +26,8 @@ import com.bardales.SmartLearnApi.domain.repository.ExamGroupSessionMemberReposi
 import com.bardales.SmartLearnApi.domain.repository.ExamGroupRoomSessionRepository;
 import com.bardales.SmartLearnApi.domain.repository.ExamGroupSessionRepository;
 import com.bardales.SmartLearnApi.domain.repository.ExamMembershipRepository;
+import com.bardales.SmartLearnApi.domain.repository.ExamGroupSessionEventRepository;
+import com.bardales.SmartLearnApi.domain.repository.ExamGroupSessionRoundRepository;
 import com.bardales.SmartLearnApi.domain.repository.ExamRepository;
 import com.bardales.SmartLearnApi.domain.repository.OptionRepository;
 import com.bardales.SmartLearnApi.domain.repository.QuestionRepository;
@@ -67,6 +71,10 @@ class ExamGroupPracticeServiceTest {
     private ExamGroupRoomSessionRepository examGroupRoomSessionRepository;
     @Mock
     private ExamGroupSessionAnswerRepository examGroupSessionAnswerRepository;
+    @Mock
+    private ExamGroupSessionRoundRepository examGroupSessionRoundRepository;
+    @Mock
+    private ExamGroupSessionEventRepository examGroupSessionEventRepository;
 
     private ExamGroupPracticeService service;
 
@@ -81,7 +89,9 @@ class ExamGroupPracticeServiceTest {
                 examGroupSessionRepository,
                 examGroupSessionMemberRepository,
                 examGroupRoomSessionRepository,
-                examGroupSessionAnswerRepository);
+                examGroupSessionAnswerRepository,
+                examGroupSessionRoundRepository,
+                examGroupSessionEventRepository);
 
         when(examGroupSessionRepository.save(any(ExamGroupSession.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -94,7 +104,13 @@ class ExamGroupPracticeServiceTest {
                 .findTopBySessionIdAndRoomTokenAndDeletedAtIsNullAndRevokedAtIsNullOrderByIdDesc(anyLong(), any()))
                 .thenReturn(Optional.empty());
         when(examGroupRoomSessionRepository.revokeActiveBySessionId(anyLong(), any())).thenReturn(0);
-        when(examGroupSessionAnswerRepository.findForQuestion(anyLong(), anyLong())).thenReturn(List.of());
+        when(examGroupSessionRoundRepository.findBySession_IdAndRoundNumberAndDeletedAtIsNull(anyLong(), any()))
+                .thenReturn(Optional.empty());
+        when(examGroupSessionRoundRepository.save(any(ExamGroupSessionRound.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(examGroupSessionEventRepository.save(any(ExamGroupSessionEvent.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(examGroupSessionAnswerRepository.findForQuestionRound(anyLong(), anyLong(), any())).thenReturn(List.of());
         when(optionRepository.findByQuestionIdOrderByIdAsc(anyLong())).thenReturn(List.of());
     }
 
@@ -331,11 +347,11 @@ class ExamGroupPracticeServiceTest {
         when(examGroupSessionMemberRepository.save(any(ExamGroupSessionMember.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        when(examGroupSessionAnswerRepository.findAllForUserQuestion(session.getId(), owner.getId(), q1.getId()))
+        when(examGroupSessionAnswerRepository.findAllForUserQuestionRound(session.getId(), owner.getId(), q1.getId(), 1))
                 .thenAnswer(invocation -> storedAnswers.stream()
                         .filter(answer -> answer.getUser() != null && owner.getId().equals(answer.getUser().getId()))
                         .toList());
-        when(examGroupSessionAnswerRepository.findForQuestion(session.getId(), q1.getId()))
+        when(examGroupSessionAnswerRepository.findForQuestionRound(session.getId(), q1.getId(), 1))
                 .thenAnswer(invocation -> List.copyOf(storedAnswers));
         when(examGroupSessionAnswerRepository.save(any(ExamGroupSessionAnswer.class)))
                 .thenAnswer(invocation -> {
@@ -411,11 +427,11 @@ class ExamGroupPracticeServiceTest {
         when(questionRepository.findById(q1.getId())).thenReturn(Optional.of(q1));
         when(optionRepository.findByQuestionIdOrderByIdAsc(q1.getId())).thenReturn(List.of(optionA));
 
-        when(examGroupSessionAnswerRepository.findAllForUserQuestion(session.getId(), owner.getId(), q1.getId()))
+        when(examGroupSessionAnswerRepository.findAllForUserQuestionRound(session.getId(), owner.getId(), q1.getId(), 1))
                 .thenAnswer(invocation -> storedAnswers.stream()
                         .filter(answer -> answer.getUser() != null && owner.getId().equals(answer.getUser().getId()))
                         .toList());
-        when(examGroupSessionAnswerRepository.findForQuestion(session.getId(), q1.getId()))
+        when(examGroupSessionAnswerRepository.findForQuestionRound(session.getId(), q1.getId(), 1))
                 .thenAnswer(invocation -> List.copyOf(storedAnswers));
         when(examGroupSessionAnswerRepository.save(any(ExamGroupSessionAnswer.class)))
                 .thenAnswer(invocation -> {
