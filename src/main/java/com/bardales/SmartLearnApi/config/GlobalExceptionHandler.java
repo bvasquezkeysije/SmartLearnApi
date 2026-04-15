@@ -3,6 +3,7 @@ package com.bardales.SmartLearnApi.config;
 import com.bardales.SmartLearnApi.exception.BadRequestException;
 import com.bardales.SmartLearnApi.exception.ForbiddenException;
 import com.bardales.SmartLearnApi.exception.NotFoundException;
+import com.bardales.SmartLearnApi.exception.RoomSessionInvalidException;
 import com.bardales.SmartLearnApi.exception.UnauthorizedException;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -41,6 +42,14 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ForbiddenException.class)
     public ResponseEntity<Map<String, Object>> handleForbidden(ForbiddenException ex) {
         return build(HttpStatus.FORBIDDEN, ex.getMessage());
+    }
+
+    @ExceptionHandler(RoomSessionInvalidException.class)
+    public ResponseEntity<Map<String, Object>> handleRoomSessionInvalid(RoomSessionInvalidException ex) {
+        Map<String, Object> extra = new LinkedHashMap<>();
+        extra.put("code", "room_session_invalid");
+        extra.put("authError", false);
+        return build(HttpStatus.FORBIDDEN, ex.getMessage(), extra);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

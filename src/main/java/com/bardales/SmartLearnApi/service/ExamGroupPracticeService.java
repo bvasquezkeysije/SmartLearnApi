@@ -30,6 +30,7 @@ import com.bardales.SmartLearnApi.dto.exam.QuestionResponse;
 import com.bardales.SmartLearnApi.exception.BadRequestException;
 import com.bardales.SmartLearnApi.exception.ForbiddenException;
 import com.bardales.SmartLearnApi.exception.NotFoundException;
+import com.bardales.SmartLearnApi.exception.RoomSessionInvalidException;
 import com.bardales.SmartLearnApi.security.JwtUserPrincipal;
 import java.text.Normalizer;
 import java.time.Duration;
@@ -400,6 +401,7 @@ public class ExamGroupPracticeService {
             session.setPhase(PHASE_OPEN);
             session.setPhaseStartedAt(null);
             session.setPhaseEndsAt(null);
+            revokeRoomSessions(session.getId());
         } else {
             session.setCurrentQuestionIndex(currentIndex + 1);
             LocalDateTime now = LocalDateTime.now();
@@ -435,6 +437,7 @@ public class ExamGroupPracticeService {
         session.setPhaseEndsAt(null);
         session.setFinishedAt(now);
         session = examGroupSessionRepository.save(session);
+        revokeRoomSessions(session.getId());
 
         List<ExamGroupSessionMember> members =
                 examGroupSessionMemberRepository.findBySessionIdAndDeletedAtIsNullOrderByCreatedAtAsc(session.getId());
@@ -477,6 +480,7 @@ public class ExamGroupPracticeService {
             session.setFinishedAt(now);
         }
         session = examGroupSessionRepository.save(session);
+        revokeRoomSessions(session.getId());
 
         List<ExamGroupSessionMember> previousMembers =
                 examGroupSessionMemberRepository.findBySessionIdAndDeletedAtIsNullOrderByCreatedAtAsc(session.getId());
@@ -647,13 +651,13 @@ public class ExamGroupPracticeService {
                     .findTopBySessionIdAndRoomTokenAndDeletedAtIsNullAndRevokedAtIsNullOrderByIdDesc(
                             session.getId(), providedToken)
                     .orElseThrow(() ->
-                            new ForbiddenException("Tu sesion de sala no es valida. Vuelve a unirte al repaso grupal."));
+                            new RoomSessionInvalidException("Tu sesion de sala no es valida. Vuelve a unirte al repaso grupal."));
             Long roomSessionUserId = roomSession.getUser() == null ? null : roomSession.getUser().getId();
             if (roomSessionUserId == null || !roomSessionUserId.equals(user.getId())) {
-                throw new ForbiddenException("Tu sesion de sala no es valida. Vuelve a unirte al repaso grupal.");
+                throw new RoomSessionInvalidException("Tu sesion de sala no es valida. Vuelve a unirte al repaso grupal.");
             }
             if (roomSession.getExpiresAt() == null || !roomSession.getExpiresAt().isAfter(now)) {
-                throw new ForbiddenException("Tu sesion de sala no es valida. Vuelve a unirte al repaso grupal.");
+                throw new RoomSessionInvalidException("Tu sesion de sala no es valida. Vuelve a unirte al repaso grupal.");
             }
             roomSession.setExpiresAt(now.plusMinutes(ROOM_SESSION_TTL_MINUTES));
             roomSession.setDeletedAt(null);
@@ -725,6 +729,7 @@ public class ExamGroupPracticeService {
             }
             session.setCurrentQuestionStartedAt(null);
             session.setFinishedAt(now);
+            revokeRoomSessions(session.getId());
             return examGroupSessionRepository.save(session);
         }
 
@@ -1230,6 +1235,7 @@ public class ExamGroupPracticeService {
                     session.setPhase(PHASE_OPEN);
                     session.setPhaseStartedAt(null);
                     session.setPhaseEndsAt(null);
+                    revokeRoomSessions(session.getId());
                     log.info(
                             "GROUP_PHASE_AUTO_REVIEW_TO_FINISHED sessionId={} examId={} lastQuestionIndex={} totalQuestions={}",
                             session.getId(),
@@ -1258,6 +1264,13 @@ public class ExamGroupPracticeService {
         }
 
         return changed ? examGroupSessionRepository.save(session) : session;
+    }
+
+    private void revokeRoomSessions(Long sessionId) {
+        if (sessionId == null) {
+            return;
+        }
+        examGroupRoomSessionRepository.revokeActiveBySessionId(sessionId, LocalDateTime.now());
     }
 
     private boolean hasAllConnectedAnswered(Long sessionId, Long questionId) {

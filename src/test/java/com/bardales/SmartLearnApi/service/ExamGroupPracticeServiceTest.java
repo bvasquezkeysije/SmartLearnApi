@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -28,6 +29,7 @@ import com.bardales.SmartLearnApi.domain.repository.OptionRepository;
 import com.bardales.SmartLearnApi.domain.repository.QuestionRepository;
 import com.bardales.SmartLearnApi.domain.repository.UserRepository;
 import com.bardales.SmartLearnApi.dto.exam.ExamGroupStateResponse;
+import com.bardales.SmartLearnApi.dto.exam.ExamGroupAdvanceRequest;
 import com.bardales.SmartLearnApi.dto.exam.ExamGroupAnswerRequest;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -91,8 +93,21 @@ class ExamGroupPracticeServiceTest {
         when(examGroupRoomSessionRepository
                 .findTopBySessionIdAndRoomTokenAndDeletedAtIsNullAndRevokedAtIsNullOrderByIdDesc(anyLong(), any()))
                 .thenReturn(Optional.empty());
+        when(examGroupRoomSessionRepository.revokeActiveBySessionId(anyLong(), any())).thenReturn(0);
         when(examGroupSessionAnswerRepository.findForQuestion(anyLong(), anyLong())).thenReturn(List.of());
         when(optionRepository.findByQuestionIdOrderByIdAsc(anyLong())).thenReturn(List.of());
+    }
+
+    @Test
+    void closeRevokesActiveRoomSessions() {
+        Fixture f = fixtureReviewSession(false);
+
+        service.close(
+                f.exam.getId(),
+                new ExamGroupAdvanceRequest(f.owner.getId(), f.session.getId(), null));
+
+        verify(examGroupRoomSessionRepository, times(1))
+                .revokeActiveBySessionId(anyLong(), any(LocalDateTime.class));
     }
 
     @Test
