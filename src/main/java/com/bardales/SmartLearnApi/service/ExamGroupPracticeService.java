@@ -341,15 +341,16 @@ public class ExamGroupPracticeService {
         if (!currentQuestion.getId().equals(request.questionId())) {
             throw new BadRequestException("La pregunta enviada no coincide con la pregunta actual del grupo.");
         }
-        if (request.questionVersion() != null
-                && request.questionVersion() > 0
-                && !request.questionVersion().equals(session.getQuestionVersion())) {
+        if (request.questionVersion() == null || request.questionVersion() <= 0) {
+            throw new BadRequestException("questionVersion es obligatorio para responder en grupo.");
+        }
+        if (!request.questionVersion().equals(session.getQuestionVersion())) {
             throw new BadRequestException("Tu respuesta pertenece a una version anterior de la pregunta.");
         }
 
         Integer currentRoundNumber = resolveCurrentRoundNumber(session);
         List<ExamGroupSessionAnswer> storedAnswers = examGroupSessionAnswerRepository
-                .findAllForUserQuestionRound(session.getId(), access.user().getId(), currentQuestion.getId(), currentRoundNumber);
+                .findAllForUserRound(session.getId(), access.user().getId(), currentRoundNumber);
         ExamGroupSessionAnswer answer = pickBestAnswer(storedAnswers);
         if (answer == null) {
             answer = new ExamGroupSessionAnswer();
@@ -368,6 +369,12 @@ public class ExamGroupPracticeService {
                 examGroupSessionAnswerRepository.deleteAllByIds(duplicateIds);
             }
         }
+        if (answer.getQuestion() != null
+                && answer.getQuestion().getId() != null
+                && !answer.getQuestion().getId().equals(currentQuestion.getId())) {
+            throw new BadRequestException("Se detecto una respuesta cruzada de otra pregunta. Recarga la sala.");
+        }
+        answer.setQuestion(currentQuestion);
 
         String selectedAnswer = resolveSubmittedAnswer(currentQuestion, request);
 
@@ -378,10 +385,31 @@ public class ExamGroupPracticeService {
 
         // Si llega un envio vacio (por ejemplo auto-envio tardio), no sobreescribir
         // una respuesta ya guardada para este usuario en esta pregunta.
+        LocalDateTime submittedAt = LocalDateTime.now();
+        Integer previousRoundNumber = currentRoundNumber > 1 ? currentRoundNumber - 1 : null;
+        if (previousRoundNumber != null && trimOrNull(request.writtenAnswer()) != null) {
+            List<ExamGroupSessionAnswer> previousRoundAnswers = examGroupSessionAnswerRepository
+                    .findAllForUserRound(session.getId(), access.user().getId(), previousRoundNumber);
+            ExamGroupSessionAnswer previousRound = pickBestAnswer(previousRoundAnswers);
+            if (previousRound != null
+                    && trimOrNull(previousRound.getSelectedAnswer()) != null
+                    && normalizeAnswer(previousRound.getSelectedAnswer()).equals(normalizeAnswer(selectedAnswer))) {
+                LocalDateTime roundOpenedAt = session.getCurrentQuestionStartedAt() != null
+                        ? session.getCurrentQuestionStartedAt()
+                        : session.getStartedAt();
+                if (roundOpenedAt != null) {
+                    long secondsFromOpen = Math.max(0, Duration.between(roundOpenedAt, submittedAt).getSeconds());
+                    if (secondsFromOpen <= 2) {
+                        throw new BadRequestException(
+                                "Respuesta repetida detectada al inicio de la pregunta. Vuelve a escribir y envia.");
+                    }
+                }
+            }
+        }
+
         boolean isCorrect = evaluateAnswer(currentQuestion, selectedAnswer);
         answer.setSelectedAnswer(selectedAnswer);
         answer.setIsCorrect(isCorrect);
-        LocalDateTime submittedAt = LocalDateTime.now();
         answer.setAnsweredAt(submittedAt);
         answer.setSubmittedAt(submittedAt);
         answer.setRoundNumber(currentRoundNumber);

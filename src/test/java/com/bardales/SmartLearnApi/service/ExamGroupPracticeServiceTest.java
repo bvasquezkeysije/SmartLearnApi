@@ -111,6 +111,7 @@ class ExamGroupPracticeServiceTest {
         when(examGroupSessionEventRepository.save(any(ExamGroupSessionEvent.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(examGroupSessionAnswerRepository.findForQuestionRound(anyLong(), anyLong(), any())).thenReturn(List.of());
+        when(examGroupSessionAnswerRepository.findAllForUserRound(anyLong(), anyLong(), any())).thenReturn(List.of());
         when(optionRepository.findByQuestionIdOrderByIdAsc(anyLong())).thenReturn(List.of());
     }
 
@@ -347,7 +348,7 @@ class ExamGroupPracticeServiceTest {
         when(examGroupSessionMemberRepository.save(any(ExamGroupSessionMember.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        when(examGroupSessionAnswerRepository.findAllForUserQuestionRound(session.getId(), owner.getId(), q1.getId(), 1))
+        when(examGroupSessionAnswerRepository.findAllForUserRound(session.getId(), owner.getId(), 1))
                 .thenAnswer(invocation -> storedAnswers.stream()
                         .filter(answer -> answer.getUser() != null && owner.getId().equals(answer.getUser().getId()))
                         .toList());
@@ -427,7 +428,7 @@ class ExamGroupPracticeServiceTest {
         when(questionRepository.findById(q1.getId())).thenReturn(Optional.of(q1));
         when(optionRepository.findByQuestionIdOrderByIdAsc(q1.getId())).thenReturn(List.of(optionA));
 
-        when(examGroupSessionAnswerRepository.findAllForUserQuestionRound(session.getId(), owner.getId(), q1.getId(), 1))
+        when(examGroupSessionAnswerRepository.findAllForUserRound(session.getId(), owner.getId(), 1))
                 .thenAnswer(invocation -> storedAnswers.stream()
                         .filter(answer -> answer.getUser() != null && owner.getId().equals(answer.getUser().getId()))
                         .toList());

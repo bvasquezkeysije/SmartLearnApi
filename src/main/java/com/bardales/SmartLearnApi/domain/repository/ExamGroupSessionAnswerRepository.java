@@ -53,6 +53,19 @@ public interface ExamGroupSessionAnswerRepository extends JpaRepository<ExamGrou
         SELECT answer
         FROM ExamGroupSessionAnswer answer
         WHERE answer.session.id = :sessionId
+          AND answer.user.id = :userId
+          AND answer.roundNumber = :roundNumber
+        ORDER BY answer.submittedAt DESC, answer.id DESC
+        """)
+    List<ExamGroupSessionAnswer> findAllForUserRound(
+        @Param("sessionId") Long sessionId,
+        @Param("userId") Long userId,
+        @Param("roundNumber") Integer roundNumber);
+
+    @Query("""
+        SELECT answer
+        FROM ExamGroupSessionAnswer answer
+        WHERE answer.session.id = :sessionId
           AND answer.question.id = :questionId
         ORDER BY answer.answeredAt ASC, answer.id ASC
         """)
