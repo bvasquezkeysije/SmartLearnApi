@@ -115,7 +115,7 @@ public class ExamGroupPracticeService {
             throw new BadRequestException("No hay repaso grupal creado aun para este examen.");
         }
 
-        ensureValidRoomSession(session, access.user(), request.roomSessionToken());
+        String requesterRoomSessionToken = ensureValidRoomSession(session, access.user(), request.roomSessionToken());
         session = refreshSessionPresence(session);
         session = syncSessionPhase(session);
         return toGroupState(session, access.user().getId(), access.canStartGroup(), requesterRoomSessionToken);
@@ -178,7 +178,7 @@ public class ExamGroupPracticeService {
             throw new BadRequestException("Ya existe un repaso grupal creado para este examen. Debes unirte al existente.");
         }
 
-        String requesterRoomSessionToken = ensureValidRoomSession(session, access.user(), request.roomSessionToken());
+        ensureValidRoomSession(session, access.user(), request.roomSessionToken());
         return toGroupState(session, access.user().getId(), access.canStartGroup(), requesterRoomSessionToken);
     }
 
